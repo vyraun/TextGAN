@@ -104,11 +104,9 @@ class Reader(object):
         if len(batch) < self.config.batch_size:
             batch.extend([[] for _ in xrange(self.config.batch_size - len(batch))])
         nbatch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
-        nmask = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
         for i, s in enumerate(batch):
             nbatch[i, :len(s)] = s
-            nmask[i, :len(s)] = 1
-        return (nbatch, nmask)
+        return nbatch
 
 
 def main(_):
@@ -119,10 +117,9 @@ def main(_):
     vocab.load_from_pickle()
 
     reader = Reader(config, vocab)
-    for batch, mask in reader.training():
-        for line, m in zip(batch, mask):
+    for batch in reader.training():
+        for line in batch:
             print line
-            print m
             for e in line:
                 print vocab.vocab[e],
             print
