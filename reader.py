@@ -16,7 +16,7 @@ class Vocab(object):
     '''Stores the vocab: forward and reverse mappings'''
     def __init__(self, config):
         self.config = config
-        self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>']
+        self.vocab = ['<pad>', '<eos>', '<unk>']
         self.vocab_lookup = {w:i for i,w in enumerate(self.vocab)}
 
     def load_by_parsing(self, save=False, verbose=True):
@@ -57,9 +57,8 @@ class Vocab(object):
 
     def lookup(self, words):
         unk_index = self.vocab_lookup.get('<unk>')
-        sos_index = self.vocab_lookup.get('<sos>')
         eos_index = self.vocab_lookup.get('<eos>')
-        return [sos_index] + [self.vocab_lookup.get(w, unk_index) for w in words] + [eos_index]
+        return [self.vocab_lookup.get(w, unk_index) for w in words] + [eos_index]
 
 
 class Reader(object):
@@ -67,33 +66,63 @@ class Reader(object):
         self.config = config
         self.vocab = vocab
 
-    def read(self, fnames):
+    def read_lines(self, fnames):
+        '''Read single lines from data'''
         for fname in fnames:
             with open(fname, 'r') as f:
                 for line in f:
-                    print line
                     yield self.vocab.lookup([w for w in utils.read_words(line)])
 
+    def read(self, fnames):
+        '''Read packed batches from data'''
+        batch = []
+        for line in self.read_lines(fnames):
+            batch.append(line)
+            if len(batch) == self.config.batch_size:
+                yield self.pack(batch)
+                batch = []
+        yield self.pack(batch)
+
     def training(self):
-        yield self.read([pjoin(self.config.data_path, 'train.txt')])
+        '''Read batches from training data'''
+        for batch in self.read([pjoin(self.config.data_path, 'train.txt')]):
+            yield batch
 
     def validation(self):
-        yield self.read([pjoin(self.config.data_path, 'valid.txt')])
+        '''Read batches from validation data'''
+        for batch in self.read([pjoin(self.config.data_path, 'valid.txt')]):
+            yield batch
 
     def testing(self):
-        yield self.read([pjoin(self.config.data_path, 'test.txt')])
+        '''Read batches from testing data'''
+        for batch in self.read([pjoin(self.config.data_path, 'test.txt')]):
+            yield batch
+
+    def pack(self, batch):
+        '''Pack python-list batches into numpy batches'''
+        max_size = max(len(s) for s in batch)
+        if len(batch) < self.config.batch_size:
+            batch.extend([[] for _ in xrange(self.config.batch_size - len(batch))])
+        nbatch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
+        nmask = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
+        for i, s in enumerate(batch):
+            nbatch[i, :len(s)] = s
+            nmask[i, :len(s)] = 1
+        return (nbatch, nmask)
 
 
 def main(_):
+    '''Reader tests'''
     config = Config()
 
     vocab = Vocab(config)
     vocab.load_from_pickle()
 
     reader = Reader(config, vocab)
-    for batch in reader.training():
-        for line in batch:
+    for batch, mask in reader.training():
+        for line, m in zip(batch, mask):
             print line
+            print m
             for e in line:
                 print vocab.vocab[e],
             print

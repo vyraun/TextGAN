@@ -5,8 +5,9 @@ import tensorflow as tf
 flags = tf.flags
 
 # command-line config
-flags.DEFINE_string("data_path",  "data",            "Data path")
-flags.DEFINE_string("vocab_file", "models/vocab.pk", "Vocab pickle file")
+flags.DEFINE_string ("data_path",  "data",            "Data path")
+flags.DEFINE_string ("vocab_file", "models/vocab.pk", "Vocab pickle file")
+flags.DEFINE_integer("batch_size", 32,                "Batch size")
 
 
 class Config(object):
