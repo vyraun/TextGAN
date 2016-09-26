@@ -52,6 +52,7 @@ class EncoderDecoderModel(object):
 
     def decoder(self, inputs, latent):
         '''Use the latent representation and word inputs to predict next words.'''
+        # TODO use word-dropout for inputs so that the model learns to use $latent.
         pass # TODO
 
     def mle_loss(self, outputs, truth):
