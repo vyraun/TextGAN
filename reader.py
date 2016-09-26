@@ -3,6 +3,7 @@ from __future__ import division
 import cPickle as pickle
 import glob
 from os.path import join as pjoin
+import random
 
 import nltk
 import numpy as np
@@ -18,6 +19,9 @@ class Vocab(object):
         self.config = config
         self.vocab = ['<pad>', '<eos>', '<unk>']
         self.vocab_lookup = {w:i for i,w in enumerate(self.vocab)}
+        self.unk_index = self.vocab_lookup.get('<unk>')
+        self.eos_index = self.vocab_lookup.get('<eos>')
+
 
     def load_by_parsing(self, save=False, verbose=True):
         '''Read the vocab from the dataset'''
@@ -56,9 +60,7 @@ class Vocab(object):
                     print 'Saved pickle file.'
 
     def lookup(self, words):
-        unk_index = self.vocab_lookup.get('<unk>')
-        eos_index = self.vocab_lookup.get('<eos>')
-        return [self.vocab_lookup.get(w, unk_index) for w in words] + [eos_index]
+        return [self.vocab_lookup.get(w, self.unk_index) for w in words] + [self.eos_index]
 
 
 class Reader(object):
@@ -73,29 +75,46 @@ class Reader(object):
                 for line in f:
                     yield self.vocab.lookup([w for w in utils.read_words(line)])
 
-    def read(self, fnames):
-        '''Read packed batches from data'''
-        batch = []
+    def buffered_read_sorted_lines(self, fnames, batches=50):
+        '''Read and return a list of lines (length multiple of batch_size) worth at most $batches
+           number of batches sorted in length'''
+        buffer_size = self.config.batch_size * batches
+        lines = []
         for line in self.read_lines(fnames):
-            batch.append(line)
-            if len(batch) == self.config.batch_size:
+            lines.append(line)
+            if len(lines) == buffer_size:
+                lines.sort(key=lambda x:len(x))
+                yield lines
+                lines = []
+        if lines:
+            lines.sort(key=lambda x:len(x))
+            mod = len(lines) % self.config.batch_size
+            if mod != 0:
+                lines = [[self.vocab.eos_index]
+                         for _ in xrange(self.config.batch_size - mod)] + lines
+            yield lines
+
+    def buffered_read(self, fnames):
+        '''Read packed batches from data with each batch having lines of similar lengths'''
+        for line_collection in self.buffered_read_sorted_lines(fnames):
+            batches = [b for b in utils.grouper(self.config.batch_size, line_collection)]
+            random.shuffle(batches)
+            for batch in batches:
                 yield self.pack(batch)
-                batch = []
-        yield self.pack(batch)
 
     def training(self):
         '''Read batches from training data'''
-        for batch in self.read([pjoin(self.config.data_path, 'train.txt')]):
+        for batch in self.buffered_read([pjoin(self.config.data_path, 'train.txt')]):
             yield batch
 
     def validation(self):
         '''Read batches from validation data'''
-        for batch in self.read([pjoin(self.config.data_path, 'valid.txt')]):
+        for batch in self.buffered_read([pjoin(self.config.data_path, 'valid.txt')]):
             yield batch
 
     def testing(self):
         '''Read batches from testing data'''
-        for batch in self.read([pjoin(self.config.data_path, 'test.txt')]):
+        for batch in self.buffered_read([pjoin(self.config.data_path, 'test.txt')]):
             yield batch
 
     def pack(self, batch):

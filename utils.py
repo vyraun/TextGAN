@@ -1,3 +1,4 @@
+import itertools
 import re
 
 import nltk
@@ -37,3 +38,11 @@ def read_words(line):
             word = fix_word(raw_word)
             if word:
                 yield word
+
+
+def grouper(n, iterable, fillvalue=None):
+    '''Group elements of iterable in groups of n. For example:
+       >>> [e for e in grouper(3, [1,2,3,4,5,6,7])]
+       [(1, 2, 3), (4, 5, 6), (7, None, None)]'''
+    args = [iter(iterable)] * n
+    return itertools.izip_longest(*args, fillvalue=fillvalue)
