@@ -8,20 +8,59 @@ import reader
 
 
 class EncoderDecoderModel(object):
-    """The encoder-decoder model."""
+    '''The encoder-decoder model.'''
+    def __init__(self, config, vocab):
+        self.config = config
+        self.vocab = vocab
+        # left-aligned data:  w1 w2 ... w_T <eos> <pad...>
+        self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
+        # right-aligned data: <pad...> <sos> w1 s2 ... w_T
+        self.rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
+        # masks where padding words are 0 and all others are 1
+        self.ldata_mask = tf.greater(self.ldata, 0, name='ldata_mask')
+        self.rdata_mask = tf.greater(self.rdata, 0, name='rdata_mask')
 
-    def __init__(self, config):
-        pass
+    def rnn_cell(self):
+        gru_cell = tf.nn.rnn_cell.GRUCell(self.config.hidden_size)
+        return tf.nn.rnn_cell.MultiRNNCell([gru_cell] * self.config.num_layers)
+
+    def word_embeddings(self, inputs, config, vocab):
+        with tf.device('/cpu:0'):
+            embedding = tf.get_variable('word_embedding', [len(self.vocab.vocab),
+                                                           self.config.word_emb_size],
+                                        initializer=tf.random_uniform_initializer(-1.0, 1.0))
+            embeds = tf.nn.embedding_lookup(embedding, inputs, name='word_embedding_lookup')
+        return embeds
+
+    def train(self, config):
+        self.lr = tf.Variable(0.0, trainable=False)
+        if config.optimizer == 'sgd':
+            optimizer = tf.train.GradientDescentOptimizer(self.lr)
+        elif config.optimizer == 'adam':
+            optimizer = tf.train.AdamOptimizer(self.lr)
+        elif config.optimizer == 'adagrad':
+            optimizer = tf.train.AdagradOptimizer(self.lr)
+        elif config.optimizer == 'adadelta':
+            optimizer = tf.train.AdadeltaOptimizer(self.lr)
+        tvars = tf.trainable_variables()
+        grads = tf.gradients(self.cost, tvars)
+        if self.config.max_grad_norm > 0:
+            grads, _ = tf.clip_by_global_norm(grads, self.config.max_grad_norm)
+        return optimizer.apply_gradients(zip(grads, tvars))
+
+    def assign_lr(self, session, lr_value):
+        print 'Setting learning rate to', lr_value
+        session.run(tf.assign(self.lr, lr_value))
 
 
 def call_session(session, model, batch):
-    f_dict = {model.data: batch}
+    f_dict = {model.ldata: batch[0], model.rdata: batch[1]}
     ret = session.run([m.perplexity, m.cost, m.train_op], f_dict)
     return ret[:-1]
 
 
 def run_epoch(session, model, config, vocab, saver, steps):
-    """Runs the model on the given data."""
+    '''Runs the model on the given data.'''
     rd = reader.Reader(config, vocab)
     if config.training:
         batch_loader = rd.training()

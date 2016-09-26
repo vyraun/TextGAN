@@ -17,9 +17,10 @@ class Vocab(object):
     '''Stores the vocab: forward and reverse mappings'''
     def __init__(self, config):
         self.config = config
-        self.vocab = ['<pad>', '<eos>', '<unk>']
+        self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>']
         self.vocab_lookup = {w:i for i,w in enumerate(self.vocab)}
         self.unk_index = self.vocab_lookup.get('<unk>')
+        self.sos_index = self.vocab_lookup.get('<sos>')
         self.eos_index = self.vocab_lookup.get('<eos>')
 
 
@@ -60,7 +61,8 @@ class Vocab(object):
                     print 'Saved pickle file.'
 
     def lookup(self, words):
-        return [self.vocab_lookup.get(w, self.unk_index) for w in words] + [self.eos_index]
+        return [self.sos_index] + [self.vocab_lookup.get(w, self.unk_index) for w in words] + \
+               [self.eos_index]
 
 
 class Reader(object):
@@ -90,7 +92,7 @@ class Reader(object):
             lines.sort(key=lambda x:len(x))
             mod = len(lines) % self.config.batch_size
             if mod != 0:
-                lines = [[self.vocab.eos_index]
+                lines = [[self.vocab.sos_index, self.vocab.eos_index]
                          for _ in xrange(self.config.batch_size - mod)] + lines
             yield lines
 
@@ -122,10 +124,12 @@ class Reader(object):
         max_size = max(len(s) for s in batch)
         if len(batch) < self.config.batch_size:
             batch.extend([[] for _ in xrange(self.config.batch_size - len(batch))])
-        nbatch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
+        leftalign_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
+        rightalign_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
         for i, s in enumerate(batch):
-            nbatch[i, :len(s)] = s
-        return nbatch
+            leftalign_batch[i, :len(s)-1] = s[1:]
+            rightalign_batch[i, -len(s)+1:] = s[:-1]
+        return leftalign_batch, rightalign_batch
 
 
 def main(_):
@@ -137,7 +141,7 @@ def main(_):
 
     reader = Reader(config, vocab)
     for batch in reader.training():
-        for line in batch:
+        for line in batch[0]:
             print line
             for e in line:
                 print vocab.vocab[e],
