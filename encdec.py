@@ -20,7 +20,7 @@ class EncoderDecoderModel(object):
 
         sent_length = tf.shape(ldata)[1]
         lembs = self.word_embeddings(ldata)
-        rembs = self.word_embeddings(rdata)
+        rembs = self.word_embeddings(rdata, reuse=True)
         state = self.encoder(tf.slice(rembs, [0, 0, 0], tf.pack([-1, sent_length-1, -1])))
         latent = utils.highway(state)
         outputs = self.decoder(lembs, latent)
@@ -38,9 +38,9 @@ class EncoderDecoderModel(object):
                                                for _ in xrange(self.config.num_layers)],
                                            state_is_tuple=True)
 
-    def word_embeddings(self, inputs):
+    def word_embeddings(self, inputs, reuse=False):
         '''Look up word embeddings for the input indices.'''
-        with tf.device('/cpu:0'):
+        with tf.device('/cpu:0') and tf.variable_scope("Embeddings", reuse=reuse):
             embedding = tf.get_variable('word_embedding', [len(self.vocab.vocab),
                                                            self.config.word_emb_size],
                                         initializer=tf.random_uniform_initializer(-1.0, 1.0))

@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from config import Config
 from encdec import EncoderDecoderModel
-from reader import Reader
+from reader import Reader, Vocab
 
 
 def call_session(session, model, batch):
@@ -69,7 +69,7 @@ def run_epoch(session, model, config, vocab, saver, steps):
 
 def main(_):
     config = Config()
-    vocab = reader.Vocab(config)
+    vocab = Vocab(config)
     vocab.load_from_pickle()
 
     config_proto = tf.ConfigProto()
