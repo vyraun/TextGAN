@@ -11,21 +11,22 @@ class EncoderDecoderModel(object):
         self.config = config
         self.vocab = vocab
         # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
-        ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
+        self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
         # right-aligned data: <pad...> <sos> w1 s2 ... w_T
-        rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
+        self.rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
         # masks where padding words are 0 and all others are 1
-        ldata_mask = tf.greater(ldata, 0, name='ldata_mask')
-        rdata_mask = tf.greater(rdata, 0, name='rdata_mask')
+        ldata_mask = tf.cast(tf.greater(self.ldata, 0, name='ldata_mask'), tf.float32)
+        rdata_mask = tf.cast(tf.greater(self.rdata, 0, name='rdata_mask'), tf.float32)
 
-        sent_length = tf.shape(ldata)[1]
-        lembs = self.word_embeddings(ldata)
-        rembs = self.word_embeddings(rdata, reuse=True)
+        sent_length = tf.shape(self.ldata)[1]
+        lembs = self.word_embeddings(self.ldata)
+        rembs = self.word_embeddings(self.rdata, reuse=True)
         state = self.encoder(rembs)
         latent = utils.highway(state)
         outputs = self.decoder(lembs, latent)
-        loss = self.mle_loss(outputs, ldata[:,1:], ldata_mask[:,1:])
-        self.cost = tf.reduce_sum(loss) / config.batch_size
+        loss = self.mle_loss(outputs, self.ldata[:,1:], ldata_mask[:,1:])
+        self.nll = tf.reduce_sum(loss) / config.batch_size
+        self.cost = self.nll
         if config.training:
             self.train_op = self.train(self.cost)
         else:
@@ -81,13 +82,13 @@ class EncoderDecoderModel(object):
     def train(self, cost):
         '''Training op.'''
         self.lr = tf.Variable(0.0, trainable=False)
-        if config.optimizer == 'sgd':
+        if self.config.optimizer == 'sgd':
             optimizer = tf.train.GradientDescentOptimizer(self.lr)
-        elif config.optimizer == 'adam':
+        elif self.config.optimizer == 'adam':
             optimizer = tf.train.AdamOptimizer(self.lr)
-        elif config.optimizer == 'adagrad':
+        elif self.config.optimizer == 'adagrad':
             optimizer = tf.train.AdagradOptimizer(self.lr)
-        elif config.optimizer == 'adadelta':
+        elif self.config.optimizer == 'adadelta':
             optimizer = tf.train.AdadeltaOptimizer(self.lr)
         tvars = tf.trainable_variables()
         grads = tf.gradients(cost, tvars)

@@ -27,13 +27,13 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
             with tf.variable_scope("Gates"): # Reset gate and update gate.
                 # We start with bias of 1.0 to not reset and not update.
                 factors = [inputs, state]
-                if self.latent:
+                if self.latent is not None:
                     factors.append(self.latent)
                 r, u = tf.split(1, 2, utils.linear(factors, 2 * self.num_units, True, 1.0))
                 r, u = tf.nn.sigmoid(r), tf.nn.sigmoid(u)
             with tf.variable_scope("Candidate"):
                 factors = [inputs, r * state]
-                if self.latent:
+                if self.latent is not None:
                     factors.append(self.latent)
                 c = self.activation(utils.linear(factors, self.num_units, True))
             new_h = u * state + (1 - u) * c

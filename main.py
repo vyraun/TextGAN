@@ -1,5 +1,7 @@
 from __future__ import division
 
+import time
+
 import numpy as np
 import tensorflow as tf
 
@@ -11,7 +13,7 @@ from reader import Reader, Vocab
 def call_session(session, model, batch):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.ldata: batch[0], model.rdata: batch[1]}
-    ret = session.run([model.perplexity, model.cost, model.train_op], f_dict)
+    ret = session.run([model.nll, model.cost, model.train_op], f_dict)
     return ret[:-1]
 
 
@@ -23,31 +25,31 @@ def run_epoch(session, model, config, vocab, saver, steps):
     else:
         batch_loader = reader.validation()
     start_time = time.time()
-    perps = 0.0
+    nlls = 0.0
     costs = 0.0
     iters = 0
-    shortterm_perps = 0.0
+    shortterm_nlls = 0.0
     shortterm_costs = 0.0
     shortterm_iters = 0
 
     for step, batch in enumerate(batch_loader):
-        perp, cost = call_session(session, model, batch)
+        nll, cost = call_session(session, model, batch)
 
-        perps += perp
+        nlls += nll
         costs += cost
-        shortterm_perps += perp
+        shortterm_nlls += nll
         shortterm_costs += cost
         iters += batch.shape[1]
         shortterm_iters += batch.shape[1]
 
         if step % config.print_every == 0:
-            avg_perp = shortterm_perps / shortterm_iters
+            avg_nll = shortterm_nlls / shortterm_iters
             avg_cost = shortterm_costs / shortterm_iters
             print("%d  perplexity: %.3f  ml_loss: %.4f  cost: %.4f  speed: %.0f wps" %
-                  (step, np.exp(avg_perp), avg_perp, avg_cost,
+                  (step, np.exp(avg_nll), avg_nll, avg_cost,
                    shortterm_iters * config.batch_size / (time.time() - start_time)))
 
-            shortterm_perps = 0.0
+            shortterm_nlls = 0.0
             shortterm_costs = 0.0
             shortterm_iters = 0
             start_time = time.time()
@@ -57,14 +59,14 @@ def run_epoch(session, model, config, vocab, saver, steps):
             save_file = config.save_file
             if not config.save_overwrite:
                 save_file = save_file + '.' + str(cur_iters)
-            print "Saving model (epoch perplexity: %.3f) ..." % np.exp(perps / iters)
+            print "Saving model (epoch perplexity: %.3f) ..." % np.exp(nlls / iters)
             save_file = saver.save(session, save_file)
             print "Saved to", save_file
 
         if cur_iters >= config.max_steps:
             break
 
-    return np.exp(perps / iters), steps + step
+    return np.exp(nlls / iters), steps + step
 
 
 def main(_):

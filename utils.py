@@ -99,6 +99,8 @@ def highway(input_, layer_size=1, bias=-2, f=tf.nn.tanh):
     t = sigmoid(Wy + b)
     z = t * g(Wy + b) + (1 - t) * y
     where g is nonlinearity, t is transform gate, and (1 - t) is carry gate."""
+    if tf.nn.nest.is_sequence(input_):
+        input_ = tf.concat(1, input_)
     shape = input_.get_shape()
     if len(shape) != 2:
         raise ValueError("Highway is expecting 2D arguments: %s" % str(shape))
