@@ -14,9 +14,6 @@ class EncoderDecoderModel(object):
         self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
         # right-aligned data: <pad...> <sos> w1 s2 ... w_T
         self.rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
-        # masks where padding words are 0 and all others are 1
-        ldata_mask = tf.cast(tf.greater(self.ldata, 0, name='ldata_mask'), tf.float32)
-        rdata_mask = tf.cast(tf.greater(self.rdata, 0, name='rdata_mask'), tf.float32)
 
         sent_length = tf.shape(self.ldata)[1]
         lembs = self.word_embeddings(self.ldata)
@@ -24,7 +21,7 @@ class EncoderDecoderModel(object):
         state = self.encoder(rembs)
         latent = utils.highway(state)
         outputs = self.decoder(lembs, latent)
-        loss = self.mle_loss(outputs, self.ldata[:,1:], ldata_mask[:,1:])
+        loss = self.mle_loss(outputs, self.ldata[:,1:])
         self.nll = tf.reduce_sum(loss) / config.batch_size
         self.cost = self.nll
         if config.training:
@@ -59,8 +56,9 @@ class EncoderDecoderModel(object):
             outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
         return outputs
 
-    def mle_loss(self, outputs, targets, mask):
+    def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
+        mask = tf.cast(tf.greater(targets, 0, name='targets_mask'), tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, self.config.hidden_size])
         softmax_w = tf.get_variable("softmax_w", [len(self.vocab.vocab), self.config.hidden_size],
                                     initializer=tf.contrib.layers.xavier_initializer())
