@@ -129,7 +129,7 @@ class Reader(object):
         rightalign_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
-            rightalign_batch[i, -len(s):] = s
+            rightalign_batch[i, -len(s)+1:] = s[:-1] # no <eos>
         return leftalign_batch, rightalign_batch
 
 

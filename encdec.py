@@ -12,7 +12,7 @@ class EncoderDecoderModel(object):
         self.vocab = vocab
         # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
         ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
-        # right-aligned data: <pad...> <sos> w1 s2 ... w_T <eos>
+        # right-aligned data: <pad...> <sos> w1 s2 ... w_T
         rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
         # masks where padding words are 0 and all others are 1
         ldata_mask = tf.greater(ldata, 0, name='ldata_mask')
@@ -21,11 +21,10 @@ class EncoderDecoderModel(object):
         sent_length = tf.shape(ldata)[1]
         lembs = self.word_embeddings(ldata)
         rembs = self.word_embeddings(rdata, reuse=True)
-        state = self.encoder(tf.slice(rembs, [0, 0, 0], tf.pack([-1, sent_length-1, -1])))
+        state = self.encoder(rembs)
         latent = utils.highway(state)
         outputs = self.decoder(lembs, latent)
-        loss = self.mle_loss(outputs, tf.slice(ldata, [0, 1], tf.pack([-1, sent_length-1])),
-                             tf.slice(ldata_mask, [0, 1], tf.pack([-1, sent_length-1])))
+        loss = self.mle_loss(outputs, ldata[:,1:], ldata_mask[:,1:])
         self.cost = tf.reduce_sum(loss) / config.batch_size
         if config.training:
             self.train_op = self.train(self.cost)

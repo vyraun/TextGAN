@@ -80,16 +80,16 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None):
     dtype = [a.dtype for a in args][0]
 
     # Now the computation.
-    with vs.variable_scope(scope or "Linear"):
-        matrix = vs.get_variable("Matrix", [total_arg_size, output_size], dtype=dtype,
+    with tf.variable_scope(scope or "Linear"):
+        matrix = tf.get_variable("Matrix", [total_arg_size, output_size], dtype=dtype,
                                  initializer=tf.contrib.layers.xavier_initializer())
         if len(args) == 1:
             res = tf.matmul(args[0], matrix)
         else:
-            res = tf.matmul(array_ops.concat(1, args), matrix)
+            res = tf.matmul(tf.concat(1, args), matrix)
         if not bias:
             return res
-        bias_term = vs.get_variable("Bias", [output_size], dtype=dtype,
+        bias_term = tf.get_variable("Bias", [output_size], dtype=dtype,
                                     initializer=tf.constant_initializer(bias_start, dtype=dtype))
     return res + bias_term
 
