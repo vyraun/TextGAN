@@ -75,7 +75,7 @@ def main(_):
     config_proto = tf.ConfigProto()
     config_proto.gpu_options.allow_growth = True
     with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
-        with tf.variable_scope("model", reuse=None):
+        with tf.variable_scope("Model", reuse=None):
             model = EncoderDecoderModel(config, vocab)
         saver = tf.train.Saver()
         try:

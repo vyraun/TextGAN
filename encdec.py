@@ -1,5 +1,8 @@
 import tensorflow as tf
 
+import rnncell
+import utils
+
 
 class EncoderDecoderModel(object):
     '''The encoder-decoder model.'''
@@ -18,19 +21,22 @@ class EncoderDecoderModel(object):
         sent_length = tf.shape(ldata)[1]
         lembs = self.word_embeddings(ldata)
         rembs = self.word_embeddings(rdata)
-        latent = self.encoder(tf.slice(rembs, [0, 0, 0], tf.pack([-1, sent_length-1, -1])))
+        state = self.encoder(tf.slice(rembs, [0, 0, 0], tf.pack([-1, sent_length-1, -1])))
+        latent = utils.highway(state)
         outputs = self.decoder(lembs, latent)
-        loss = self.mle_loss(outputs, tf.slice(ldata, [0, 1], tf.pack([-1, sent_length-1])))
-        self.cost = loss / config.batch_size
+        loss = self.mle_loss(outputs, tf.slice(ldata, [0, 1], tf.pack([-1, sent_length-1])),
+                             tf.slice(ldata_mask, [0, 1], tf.pack([-1, sent_length-1])))
+        self.cost = tf.reduce_sum(loss) / config.batch_size
         if config.training:
             self.train_op = self.train(self.cost)
         else:
             self.train_op = tf.no_op()
 
-    def rnn_cell(self):
+    def rnn_cell(self, latent=None):
         '''Return a multi-layer RNN cell.'''
-        gru_cell = tf.nn.rnn_cell.GRUCell(self.config.hidden_size)
-        return tf.nn.rnn_cell.MultiRNNCell([gru_cell] * self.config.num_layers)
+        return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
+                                               for _ in xrange(self.config.num_layers)],
+                                           state_is_tuple=True)
 
     def word_embeddings(self, inputs):
         '''Look up word embeddings for the input indices.'''
@@ -43,16 +49,35 @@ class EncoderDecoderModel(object):
 
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation.'''
-        pass # TODO
+        with tf.variable_scope("Encoder"):
+            _, latent = tf.nn.dynamic_rnn(self.rnn_cell(), inputs, dtype=tf.float32)
+        return latent
 
     def decoder(self, inputs, latent):
         '''Use the latent representation and word inputs to predict next words.'''
-        # TODO use word-dropout for inputs so that the model learns to use $latent.
-        pass # TODO
+        with tf.variable_scope("Decoder"):
+            outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
+        return outputs
 
-    def mle_loss(self, outputs, truth):
+    def mle_loss(self, outputs, targets, mask):
         '''Maximum likelihood estimation loss.'''
-        pass # TODO
+        output = tf.reshape(tf.concat(1, outputs), [-1, self.config.hidden_size])
+        softmax_w = tf.get_variable("softmax_w", [len(self.vocab.vocab), self.config.hidden_size],
+                                    initializer=tf.contrib.layers.xavier_initializer())
+        softmax_b = tf.get_variable("softmax_b", [len(self.vocab.vocab)],
+                                    initializer=tf.zeros_initializer)
+        if self.config.training and self.config.softmax_samples < len(self.vocab.vocab):
+            targets = tf.reshape(targets, [-1, 1])
+            mask = tf.reshape(mask, [-1])
+            loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, output, targets,
+                                          self.config.softmax_samples, len(self.vocab.vocab)) * mask
+        else:
+            logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(softmax_w),
+                                              name='softmax_transform'), softmax_b)
+            loss = tf.nn.seq2seq.sequence_loss_by_example([logits],
+                                                          [tf.reshape(targets, [-1])],
+                                                          [tf.reshape(mask, [-1])])
+        return tf.reshape(loss, [self.config.batch_size, -1])
 
     def train(self, cost):
         '''Training op.'''

@@ -69,6 +69,7 @@ class Reader(object):
     def __init__(self, config, vocab):
         self.config = config
         self.vocab = vocab
+        random.seed(0) # deterministic random
 
     def read_lines(self, fnames):
         '''Read single lines from data'''
