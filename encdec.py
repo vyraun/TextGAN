@@ -16,11 +16,11 @@ class EncoderDecoderModel(object):
         self.rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
 
         sent_length = tf.shape(self.ldata)[1]
-        lembs = self.word_embeddings(self.ldata)
+        lembs_dropped = self.word_embeddings(self.word_dropout(self.ldata))
         rembs = self.word_embeddings(self.rdata, reuse=True)
         state = self.encoder(rembs)
         latent = utils.highway(state)
-        outputs = self.decoder(lembs, latent)
+        outputs = self.decoder(lembs_dropped, latent)
         # shift left the input to get the targets
         targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
         loss = self.mle_loss(outputs, targets)
@@ -36,6 +36,16 @@ class EncoderDecoderModel(object):
         return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
                                                for _ in xrange(self.config.num_layers)],
                                            state_is_tuple=True)
+
+    def word_dropout(self, inputs):
+        '''Randomly replace words from inputs with <unk>.'''
+        if self.config.decoder_dropout > 0.0:
+            unks = tf.ones_like(inputs, tf.int32) * self.vocab.unk_index
+            mask = tf.cast(tf.greater(tf.nn.dropout(tf.cast(unks, tf.float32),
+                                                    self.config.decoder_dropout), 0.0), tf.int32)
+            return ((1 - mask) * inputs) + (mask * unks)
+        else:
+            return inputs
 
     def word_embeddings(self, inputs, reuse=False):
         '''Look up word embeddings for the input indices.'''

@@ -1,5 +1,6 @@
 from __future__ import division
 
+import sys
 import time
 
 import numpy as np
@@ -15,6 +16,15 @@ def call_session(session, model, batch):
     f_dict = {model.ldata: batch[0], model.rdata: batch[1]}
     ret = session.run([model.nll, model.cost, model.train_op], f_dict)
     return ret[:-1]
+
+
+def save_model(session, model, saver, config, perp):
+    save_file = config.save_file
+    if not config.save_overwrite:
+        save_file = save_file + '.' + str(cur_iters)
+    print "Saving model (epoch perplexity: %.3f) ..." % perp
+    save_file = saver.save(session, save_file)
+    print "Saved to", save_file
 
 
 def run_epoch(session, model, config, vocab, saver, steps):
@@ -56,18 +66,17 @@ def run_epoch(session, model, config, vocab, saver, steps):
             start_time = time.time()
 
         cur_iters = steps + step
-        if config.training and cur_iters and cur_iters % config.save_every == 0:
-            save_file = config.save_file
-            if not config.save_overwrite:
-                save_file = save_file + '.' + str(cur_iters)
-            print "Saving model (epoch perplexity: %.3f) ..." % np.exp(nlls / iters)
-            save_file = saver.save(session, save_file)
-            print "Saved to", save_file
+        if config.training and cur_iters and config.save_every > 0 and \
+                cur_iters % config.save_every == 0:
+            save_model(session, model, saver, config, np.exp(nlls / iters))
 
         if cur_iters >= config.max_steps:
             break
 
-    return np.exp(nlls / iters), steps + step
+    perp = np.exp(nlls / iters)
+    if config.training and config.save_every < 0:
+        save_model(session, model, saver, config, perp)
+    return perp, steps + step
 
 
 def main(_):

@@ -15,6 +15,7 @@ flags.DEFINE_integer("word_emb_size",   256,     "Number of learnable dimensions
                                                  "embeddings")
 flags.DEFINE_integer("num_layers",      2,       "Number of RNN layers")
 flags.DEFINE_integer("hidden_size",     192,     "RNN hidden state size")
+flags.DEFINE_float  ("decoder_dropout", 0.5,     "Decoder input word dropout probability")
 flags.DEFINE_integer("softmax_samples", 1000,    "Number of classes to sample for softmax")
 flags.DEFINE_float  ("max_grad_norm",   5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",        True,    "Training mode, turn off for testing")
@@ -23,9 +24,10 @@ flags.DEFINE_float  ("learning_rate",   1e-3,    "Optimizer initial learning rat
 flags.DEFINE_integer("max_epoch",       50,      "Maximum number of epochs to run for")
 flags.DEFINE_integer("max_steps",       9999999, "Maximum number of steps to run for")
 
-flags.DEFINE_integer("print_every",     50,     "Print every these many steps")
-flags.DEFINE_integer("save_every",      1000,   "Save every these many steps")
-flags.DEFINE_bool   ("save_overwrite",  True,   "Overwrite the same file each time")
+flags.DEFINE_integer("print_every",     50,      "Print every these many steps")
+flags.DEFINE_integer("save_every",      -1,      "Save every these many steps (0 to disable, " \
+                                                 "-1 for each epoch)")
+flags.DEFINE_bool   ("save_overwrite",  True,    "Overwrite the same file each time")
 
 
 class Config(object):
