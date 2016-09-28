@@ -19,6 +19,7 @@ def call_session(session, model, batch):
 
 
 def save_model(session, model, saver, config, perp):
+    '''Save model file.'''
     save_file = config.save_file
     if not config.save_overwrite:
         save_file = save_file + '.' + str(cur_iters)
@@ -91,6 +92,7 @@ def main(_):
             model = EncoderDecoderModel(config, vocab)
         saver = tf.train.Saver()
         try:
+            # try to restore a saved model file
             saver.restore(session, config.load_file)
             print "Model restored from", config.load_file
         except ValueError:
