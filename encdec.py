@@ -39,7 +39,7 @@ class EncoderDecoderModel(object):
 
     def word_dropout(self, inputs):
         '''Randomly replace words from inputs with <unk>.'''
-        if self.config.decoder_dropout > 0.0:
+        if self.config.training and self.config.decoder_dropout > 0.0:
             unks = tf.ones_like(inputs, tf.int32) * self.vocab.unk_index
             mask = tf.cast(tf.greater(tf.nn.dropout(tf.cast(unks, tf.float32),
                                                     self.config.decoder_dropout), 0.0), tf.int32)
