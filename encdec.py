@@ -21,7 +21,9 @@ class EncoderDecoderModel(object):
         state = self.encoder(rembs)
         latent = utils.highway(state)
         outputs = self.decoder(lembs, latent)
-        loss = self.mle_loss(outputs, self.ldata[:,1:])
+        # shift left the input to get the targets
+        targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
+        loss = self.mle_loss(outputs, targets)
         self.nll = tf.reduce_sum(loss) / config.batch_size
         self.cost = self.nll
         if config.training:
@@ -68,7 +70,8 @@ class EncoderDecoderModel(object):
             targets = tf.reshape(targets, [-1, 1])
             mask = tf.reshape(mask, [-1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, output, targets,
-                                          self.config.softmax_samples, len(self.vocab.vocab)) * mask
+                                              self.config.softmax_samples, len(self.vocab.vocab))
+            loss *= mask
         else:
             logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(softmax_w),
                                               name='softmax_transform'), softmax_b)

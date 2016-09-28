@@ -39,8 +39,9 @@ def run_epoch(session, model, config, vocab, saver, steps):
         costs += cost
         shortterm_nlls += nll
         shortterm_costs += cost
-        iters += batch.shape[1]
-        shortterm_iters += batch.shape[1]
+        # batch[1] is the right aligned batch, without <eos>. predictions also have one token less.
+        iters += batch[1].shape[1]
+        shortterm_iters += batch[1].shape[1]
 
         if step % config.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters

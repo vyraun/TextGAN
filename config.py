@@ -23,6 +23,11 @@ flags.DEFINE_float  ("learning_rate",   1e-3,    "Optimizer initial learning rat
 flags.DEFINE_integer("max_epoch",       50,      "Maximum number of epochs to run for")
 flags.DEFINE_integer("max_steps",       9999999, "Maximum number of steps to run for")
 
+flags.DEFINE_integer("print_every",     50,     "Print every these many steps")
+flags.DEFINE_integer("save_every",      1000,   "Save every these many steps")
+flags.DEFINE_bool   ("save_overwrite",  True,   "Overwrite the same file each time")
+
+
 class Config(object):
     def __init__(self):
         # copy flag values to attributes of this Config object
