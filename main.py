@@ -18,7 +18,7 @@ def call_session(session, model, batch):
     return ret[:-1]
 
 
-def save_model(session, model, saver, config, perp):
+def save_model(session, model, saver, config, perp, cur_iters):
     '''Save model file.'''
     save_file = config.save_file
     if not config.save_overwrite:
@@ -69,15 +69,16 @@ def run_epoch(session, model, config, vocab, saver, steps):
         cur_iters = steps + step
         if config.training and cur_iters and config.save_every > 0 and \
                 cur_iters % config.save_every == 0:
-            save_model(session, model, saver, config, np.exp(nlls / iters))
+            save_model(session, model, saver, config, np.exp(nlls / iters), cur_iters)
 
         if cur_iters >= config.max_steps:
             break
 
     perp = np.exp(nlls / iters)
+    cur_iters = steps + step
     if config.training and config.save_every < 0:
-        save_model(session, model, saver, config, perp)
-    return perp, steps + step
+        save_model(session, model, saver, config, perp, cur_iters)
+    return perp, cur_iters
 
 
 def main(_):
