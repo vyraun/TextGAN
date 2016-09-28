@@ -29,6 +29,9 @@ flags.DEFINE_integer("save_every",      -1,      "Save every these many steps (0
                                                  "-1 for each epoch)")
 flags.DEFINE_bool   ("save_overwrite",  True,    "Overwrite the same file each time")
 
+flags.DEFINE_bool   ("force_nolatent",  False,   "Force no latent input for decoder")
+flags.DEFINE_bool   ("force_noinputs",  False,   "Force no true inputs for decoder")
+
 
 class Config(object):
     def __init__(self):
