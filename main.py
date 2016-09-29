@@ -115,12 +115,14 @@ def main(_):
                 perplexity, steps = run_epoch(session, train_model, reader.training(), config,
                                               vocab, saver, steps, config.max_steps)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
-                perplexity, _ = run_epoch(session, eval_model, reader.validation(), config, vocab,
-                                          None, 0, -1)
-                print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
+                if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
+                    perplexity, _ = run_epoch(session, eval_model, reader.validation(), config,
+                                              vocab, None, 0, -1)
+                    print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                 if steps >= config.max_steps:
                     break
         else:
+            print '\nTesting'
             perplexity, _ = run_epoch(session, test_model, reader.testing(), config, vocab, None, 0,
                                       config.max_steps)
             print "Test Perplexity: %.3f" % perplexity
