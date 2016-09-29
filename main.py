@@ -14,6 +14,7 @@ from reader import Reader, Vocab
 def call_session(session, model, batch):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.ldata: batch[0], model.rdata: batch[1]}
+    # model.train_op will be tf.no_op() for a non-training model
     ret = session.run([model.nll, model.cost, model.train_op], f_dict)
     return ret[:-1]
 
@@ -28,13 +29,8 @@ def save_model(session, model, saver, config, perp, cur_iters):
     print "Saved to", save_file
 
 
-def run_epoch(session, model, config, vocab, saver, steps):
+def run_epoch(session, model, batch_loader, config, vocab, saver, steps, max_steps):
     '''Runs the model on the given data for an epoch.'''
-    reader = Reader(config, vocab)
-    if config.training:
-        batch_loader = reader.training()
-    else:
-        batch_loader = reader.validation()
     start_time = time.time()
     nlls = 0.0
     costs = 0.0
@@ -67,16 +63,16 @@ def run_epoch(session, model, config, vocab, saver, steps):
             start_time = time.time()
 
         cur_iters = steps + step
-        if config.training and cur_iters and config.save_every > 0 and \
+        if saver is not None and cur_iters and config.save_every > 0 and \
                 cur_iters % config.save_every == 0:
             save_model(session, model, saver, config, np.exp(nlls / iters), cur_iters)
 
-        if cur_iters >= config.max_steps:
+        if max_steps > 0 and cur_iters >= max_steps:
             break
 
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
-    if config.training and config.save_every < 0:
+    if saver is not None and config.save_every < 0:
         save_model(session, model, saver, config, perp, cur_iters)
     return perp, cur_iters
 
@@ -85,12 +81,19 @@ def main(_):
     config = Config()
     vocab = Vocab(config)
     vocab.load_from_pickle()
+    reader = Reader(config, vocab)
 
     config_proto = tf.ConfigProto()
     config_proto.gpu_options.allow_growth = True
     with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
-        with tf.variable_scope("Model", reuse=None):
-            model = EncoderDecoderModel(config, vocab)
+        if config.training:
+            with tf.variable_scope("Model", reuse=None):
+                train_model = EncoderDecoderModel(config, vocab, True)
+            with tf.variable_scope("Model", reuse=True):
+                eval_model = EncoderDecoderModel(config, vocab, False)
+        else:
+            with tf.variable_scope("Model", reuse=None):
+                test_model = EncoderDecoderModel(config, vocab, False)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
@@ -104,20 +107,23 @@ def main(_):
                 print "You need to provide a valid model file for testing!"
                 sys.exit(1)
 
-        steps = 0
         if config.training:
-            model.assign_lr(session, config.learning_rate)
-        for i in xrange(config.max_epoch):
-            if config.training:
-                print "Epoch: %d Learning rate: %.4f" % (i + 1, session.run(model.lr))
-            perplexity, steps = run_epoch(session, model, config, vocab, saver, steps)
-            if config.training:
+            steps = 0
+            train_model.assign_lr(session, config.learning_rate)
+            for i in xrange(config.max_epoch):
+                print "\nEpoch: %d Learning rate: %.4f" % (i + 1, session.run(train_model.lr))
+                perplexity, steps = run_epoch(session, train_model, reader.training(), config,
+                                              vocab, saver, steps, config.max_steps)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
-            else:
-                print "Test Perplexity: %.3f" % (perplexity,)
-                break
-            if steps >= config.max_steps:
-                break
+                perplexity, _ = run_epoch(session, eval_model, reader.validation(), config, vocab,
+                                          None, 0, -1)
+                print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
+                if steps >= config.max_steps:
+                    break
+        else:
+            perplexity, _ = run_epoch(session, test_model, reader.testing(), config, vocab, None, 0,
+                                      config.max_steps)
+            print "Test Perplexity: %.3f" % perplexity
 
 
 if __name__ == "__main__":

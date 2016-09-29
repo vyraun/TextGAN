@@ -7,9 +7,10 @@ import utils
 class EncoderDecoderModel(object):
     '''The encoder-decoder model.'''
 
-    def __init__(self, config, vocab):
+    def __init__(self, config, vocab, training):
         self.config = config
         self.vocab = vocab
+        self.training = training
         # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
         self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
         # right-aligned data: <pad...> <sos> w1 s2 ... w_T
@@ -26,7 +27,7 @@ class EncoderDecoderModel(object):
         loss = self.mle_loss(outputs, targets)
         self.nll = tf.reduce_sum(loss) / config.batch_size
         self.cost = self.nll
-        if config.training:
+        if training:
             self.train_op = self.train(self.cost)
         else:
             self.train_op = tf.no_op()
@@ -39,7 +40,7 @@ class EncoderDecoderModel(object):
 
     def word_dropout(self, inputs):
         '''Randomly replace words from inputs with <unk>.'''
-        if self.config.training and self.config.decoder_dropout > 0.0:
+        if self.training and self.config.decoder_dropout > 0.0:
             unks = tf.ones_like(inputs, tf.int32) * self.vocab.unk_index
             mask = tf.cast(tf.greater(tf.nn.dropout(tf.cast(unks, tf.float32),
                                                     self.config.decoder_dropout), 0.0), tf.int32)
@@ -80,7 +81,7 @@ class EncoderDecoderModel(object):
                                     initializer=tf.contrib.layers.xavier_initializer())
         softmax_b = tf.get_variable("softmax_b", [len(self.vocab.vocab)],
                                     initializer=tf.zeros_initializer)
-        if self.config.training and self.config.softmax_samples < len(self.vocab.vocab):
+        if self.training and self.config.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])
             mask = tf.reshape(mask, [-1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, output, targets,
