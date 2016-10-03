@@ -98,15 +98,8 @@ class EncoderDecoderModel(object):
     def train(self, cost):
         '''Training op.'''
         self.lr = tf.Variable(0.0, trainable=False)
-        if self.config.optimizer == 'sgd':
-            optimizer = tf.train.GradientDescentOptimizer(self.lr)
-        elif self.config.optimizer == 'adam':
-            optimizer = tf.train.AdamOptimizer(self.lr)
-        elif self.config.optimizer == 'adagrad':
-            optimizer = tf.train.AdagradOptimizer(self.lr)
-        elif self.config.optimizer == 'adadelta':
-            optimizer = tf.train.AdadeltaOptimizer(self.lr)
-        tvars = tf.trainable_variables()
+        optimizer = utils.get_optimizer(self.config, self.lr)
+        tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Model')
         grads = tf.gradients(cost, tvars)
         if self.config.max_grad_norm > 0:
             grads, _ = tf.clip_by_global_norm(grads, self.config.max_grad_norm)

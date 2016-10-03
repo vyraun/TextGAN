@@ -32,7 +32,8 @@ def fix_word(word):
 
 
 def read_words(line):
-    for raw_word in nltk.word_tokenize(line.replace('<unk>', '-unk-')): # workaround to get the NLTK tokenization deal with <unk> nicely
+    # workaround to get the NLTK tokenization deal with <unk> nicely
+    for raw_word in nltk.word_tokenize(line.replace('<unk>', '-unk-')):
         if raw_word == '-unk-':
             yield '<unk>'
         else:
@@ -47,6 +48,19 @@ def grouper(n, iterable, fillvalue=None):
        [(1, 2, 3), (4, 5, 6), (7, None, None)]'''
     args = [iter(iterable)] * n
     return itertools.izip_longest(*args, fillvalue=fillvalue)
+
+
+def get_optimizer(config, lr):
+    '''Return an optimizer based on the configuration'''
+    if config.optimizer == 'sgd':
+        optimizer = tf.train.GradientDescentOptimizer(lr)
+    elif config.optimizer == 'adam':
+        optimizer = tf.train.AdamOptimizer(lr)
+    elif config.optimizer == 'adagrad':
+        optimizer = tf.train.AdagradOptimizer(lr)
+    elif config.optimizer == 'adadelta':
+        optimizer = tf.train.AdadeltaOptimizer(lr)
+    return optimizer
 
 
 def linear(args, output_size, bias, bias_start=0.0, scope=None):
