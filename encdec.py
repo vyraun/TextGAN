@@ -19,8 +19,7 @@ class EncoderDecoderModel(object):
         sent_length = tf.shape(self.ldata)[1]
         lembs_dropped = self.word_embeddings(self.word_dropout(self.ldata))
         rembs = self.word_embeddings(self.rdata, reuse=True)
-        state = self.encoder(rembs)
-        latent = utils.highway(state)
+        latent = self.encoder(rembs)
         outputs = self.decoder(lembs_dropped, latent)
         # shift left the input to get the targets
         targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
@@ -60,7 +59,8 @@ class EncoderDecoderModel(object):
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation.'''
         with tf.variable_scope("Encoder"):
-            _, latent = tf.nn.dynamic_rnn(self.rnn_cell(), inputs, dtype=tf.float32)
+            _, state = tf.nn.dynamic_rnn(self.rnn_cell(), inputs, dtype=tf.float32)
+            latent = utils.highway(state)
         return latent
 
     def decoder(self, inputs, latent):
@@ -77,10 +77,11 @@ class EncoderDecoderModel(object):
         '''Maximum likelihood estimation loss.'''
         mask = tf.cast(tf.greater(targets, 0, name='targets_mask'), tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, self.config.hidden_size])
-        softmax_w = tf.get_variable("softmax_w", [len(self.vocab.vocab), self.config.hidden_size],
-                                    initializer=tf.contrib.layers.xavier_initializer())
-        softmax_b = tf.get_variable("softmax_b", [len(self.vocab.vocab)],
-                                    initializer=tf.zeros_initializer)
+        with tf.variable_scope("MLE_Softmax"):
+            softmax_w = tf.get_variable("W", [len(self.vocab.vocab), self.config.hidden_size],
+                                        initializer=tf.contrib.layers.xavier_initializer())
+            softmax_b = tf.get_variable("b", [len(self.vocab.vocab)],
+                                        initializer=tf.zeros_initializer)
         if self.training and self.config.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])
             mask = tf.reshape(mask, [-1])
@@ -96,10 +97,11 @@ class EncoderDecoderModel(object):
         return tf.reshape(loss, [self.config.batch_size, -1])
 
     def train(self, cost):
-        '''Training op.'''
+        '''Training op for MLE mode.'''
         self.lr = tf.Variable(0.0, trainable=False)
         optimizer = utils.get_optimizer(self.config, self.lr)
-        tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Model')
+        tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                  scope='.*/(Embeddings|Encoder|Decoder|MLE_Softmax)')
         grads = tf.gradients(cost, tvars)
         if self.config.max_grad_norm > 0:
             grads, _ = tf.clip_by_global_norm(grads, self.config.max_grad_norm)
