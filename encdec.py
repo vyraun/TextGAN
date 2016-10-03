@@ -5,7 +5,7 @@ import utils
 
 
 class EncoderDecoderModel(object):
-    '''The encoder-decoder model.'''
+    '''The encoder-decoder adversarial model.'''
 
     def __init__(self, config, vocab, training):
         self.config = config
