@@ -13,13 +13,13 @@ from reader import Reader, Vocab
 
 def call_session(session, model, batch):
     '''Use the session to run the model on the batch data.'''
-    f_dict = {model.ldata: batch[0], model.rdata: batch[1]}
+    f_dict = {model.ldata: batch[0], model.rdata: batch[1], model.lengths: batch[2]}
     # model.train_op will be tf.no_op() for a non-training model
-    ret = session.run([model.nll, model.cost, model.train_op], f_dict)
+    ret = session.run([model.nll, model.mle_cost, model.gan_cost, model.train_op], f_dict)
     return ret[:-1]
 
 
-def save_model(session, model, saver, config, perp, cur_iters):
+def save_model(session, saver, config, perp, cur_iters):
     '''Save model file.'''
     save_file = config.save_file
     if not config.save_overwrite:
@@ -29,43 +29,50 @@ def save_model(session, model, saver, config, perp, cur_iters):
     print "Saved to", save_file
 
 
-def run_epoch(session, model, batch_loader, config, vocab, saver, steps, max_steps):
+def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver, steps, max_steps):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
-    costs = 0.0
+    mle_costs = 0.0
+    gan_costs = 0.0
     iters = 0
     shortterm_nlls = 0.0
-    shortterm_costs = 0.0
+    shortterm_mle_costs = 0.0
+    shortterm_gan_costs = 0.0
     shortterm_iters = 0
 
     for step, batch in enumerate(batch_loader):
-        nll, cost = call_session(session, model, batch)
+        nll, mle_cost, gan_cost = call_session(session, mle_model, batch) # TODO GAN updates?
 
         nlls += nll
-        costs += cost
+        mle_costs += mle_cost
+        gan_costs += gan_cost
         shortterm_nlls += nll
-        shortterm_costs += cost
+        shortterm_mle_costs += mle_cost
+        shortterm_gan_costs += gan_cost
         # batch[1] is the right aligned batch, without <eos>. predictions also have one token less.
         iters += batch[1].shape[1]
         shortterm_iters += batch[1].shape[1]
 
         if step % config.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
-            avg_cost = shortterm_costs / shortterm_iters
-            print("%d  perplexity: %.3f  ml_loss: %.4f  cost: %.4f  speed: %.0f wps" %
-                  (step, np.exp(avg_nll), avg_nll, avg_cost,
+            avg_mle_cost = shortterm_mle_costs / shortterm_iters
+            avg_gan_cost = shortterm_gan_costs / shortterm_iters
+            print("%d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
+                  "speed: %.0f wps" %
+                  (step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost,
                    shortterm_iters * config.batch_size / (time.time() - start_time)))
 
             shortterm_nlls = 0.0
-            shortterm_costs = 0.0
+            shortterm_mle_costs = 0.0
+            shortterm_gan_costs = 0.0
             shortterm_iters = 0
             start_time = time.time()
 
         cur_iters = steps + step
         if saver is not None and cur_iters and config.save_every > 0 and \
                 cur_iters % config.save_every == 0:
-            save_model(session, model, saver, config, np.exp(nlls / iters), cur_iters)
+            save_model(session, saver, config, np.exp(nlls / iters), cur_iters)
 
         if max_steps > 0 and cur_iters >= max_steps:
             break
@@ -73,7 +80,7 @@ def run_epoch(session, model, batch_loader, config, vocab, saver, steps, max_ste
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
     if saver is not None and config.save_every < 0:
-        save_model(session, model, saver, config, perp, cur_iters)
+        save_model(session, saver, config, perp, cur_iters)
     return perp, cur_iters
 
 
@@ -88,12 +95,13 @@ def main(_):
     with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
         if config.training:
             with tf.variable_scope("Model", reuse=None):
-                train_model = EncoderDecoderModel(config, vocab, True)
+                mle_model = EncoderDecoderModel(config, vocab, True, True)
+                gan_model = EncoderDecoderModel(config, vocab, True, False)
             with tf.variable_scope("Model", reuse=True):
-                eval_model = EncoderDecoderModel(config, vocab, False)
+                eval_model = EncoderDecoderModel(config, vocab, False, True)
         else:
             with tf.variable_scope("Model", reuse=None):
-                test_model = EncoderDecoderModel(config, vocab, False)
+                test_model = EncoderDecoderModel(config, vocab, False, True)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
@@ -111,16 +119,20 @@ def main(_):
             steps = 0
             train_perps = []
             valid_perps = []
-            train_model.assign_lr(session, config.learning_rate)
+            mle_model.assign_lr(session, config.learning_rate)
+            gan_model.assign_d_lr(session, config.learning_rate) # TODO different learning rates
+            gan_model.assign_g_lr(session, config.learning_rate) # TODO ^
             for i in xrange(config.max_epoch):
-                print "\nEpoch: %d Learning rate: %.4f" % (i + 1, session.run(train_model.lr))
-                perplexity, steps = run_epoch(session, train_model, reader.training(), config,
-                                              vocab, saver, steps, config.max_steps)
+                print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
+                      "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
+                                           session.run(gan_model.d_lr), session.run(gan_model.g_lr))
+                perplexity, steps = run_epoch(session, mle_model, gan_model, reader.training(),
+                                              config, vocab, saver, steps, config.max_steps)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
-                    perplexity, _ = run_epoch(session, eval_model, reader.validation(), config,
-                                              vocab, None, 0, -1)
+                    perplexity, _ = run_epoch(session, eval_model, None, reader.validation(),
+                                              config, vocab, None, 0, -1)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                     valid_perps.append(perplexity)
                 else:
@@ -131,8 +143,8 @@ def main(_):
                     break
         else:
             print '\nTesting'
-            perplexity, _ = run_epoch(session, test_model, reader.testing(), config, vocab, None, 0,
-                                      config.max_steps)
+            perplexity, _ = run_epoch(session, test_model, None, reader.testing(), config, vocab,
+                                      None, 0, config.max_steps)
             print "Test Perplexity: %.3f" % perplexity
 
 

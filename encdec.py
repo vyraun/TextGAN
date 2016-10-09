@@ -7,29 +7,44 @@ import utils
 class EncoderDecoderModel(object):
     '''The encoder-decoder adversarial model.'''
 
-    def __init__(self, config, vocab, training):
+    def __init__(self, config, vocab, training, mle_mode):
         self.config = config
         self.vocab = vocab
         self.training = training
+        self.mle_mode = mle_mode
+
         # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
         self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
         # right-aligned data: <pad...> <sos> w1 s2 ... w_T
         self.rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
+        # sentence lengths
+        self.lengths = tf.placeholder(tf.int32, [config.batch_size], name='lengths')
 
-        sent_length = tf.shape(self.ldata)[1]
-        lembs_dropped = self.word_embeddings(self.word_dropout(self.ldata))
-        rembs = self.word_embeddings(self.rdata, reuse=True)
-        latent = self.encoder(rembs)
-        outputs = self.decoder(lembs_dropped, latent)
-        # shift left the input to get the targets
-        targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
-        loss = self.mle_loss(outputs, targets)
-        self.nll = tf.reduce_sum(loss) / config.batch_size
-        self.cost = self.nll
-        if training:
-            self.train_op = self.train(self.cost)
+        if mle_mode:
+            lembs_dropped = self.word_embeddings(self.word_dropout(self.ldata))
+            rembs = self.word_embeddings(self.rdata, reuse=True)
+            latent = self.encoder(rembs)
         else:
-            self.train_op = tf.no_op()
+            latent = None # TODO
+            # TODO lembs_dropped?
+        outputs = self.decoder(lembs_dropped, latent)
+        d_out = self.discriminator(outputs)
+        if mle_mode:
+            # shift left the input to get the targets
+            targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
+            mle_loss = self.mle_loss(outputs, targets)
+            self.nll = tf.reduce_sum(mle_loss) / config.batch_size
+            self.mle_cost = self.nll
+            gan_loss = self.gan_loss(d_out, 1)
+            self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
+            if training:
+                self.train_op = [self.train_mle(self.mle_cost), self.train_d(self.gan_cost)]
+            else:
+                self.train_op = [tf.no_op(), tf.no_op()]
+        else:
+            gan_loss = self.gan_loss(d_out, 0)
+            self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
+            self.train_op = [self.train_g(self.gan_cost), self.train_d(self.gan_cost)]
 
     def rnn_cell(self, latent=None):
         '''Return a multi-layer RNN cell.'''
@@ -96,18 +111,46 @@ class EncoderDecoderModel(object):
                                                           [tf.reshape(mask, [-1])])
         return tf.reshape(loss, [self.config.batch_size, -1])
 
-    def train(self, cost):
-        '''Training op for MLE mode.'''
-        self.lr = tf.Variable(0.0, trainable=False)
-        optimizer = utils.get_optimizer(self.config, self.lr)
-        tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                  scope='.*/(Embeddings|Encoder|Decoder|MLE_Softmax)')
+    def discriminator(self, states):
+        '''Discriminator that operates on the final states of the sentences.'''
+        with tf.variable_scope("Discriminator"):
+            indices = self.lengths - 2
+            indices = np.concat(1, [tf.range(self.config.batch_size), indices])
+            final_states = tf.gather_nd(states, indices) # 2D array of final states
+            output = utils.linear(final_states, 1, True, 0.0)
+        return output
+
+    def gan_loss(self, d_out, label):
+        '''Return the discriminator loss according to the label. Put no variables here.'''
+        return tf.nn.sigmoid_cross_entropy_with_logits(d_out, tf.constant(label, dtype=tf.float32,
+                                                                          shape=d_out.get_shape()))
+
+    def _train(self, lr, scope):
+        '''Generic training helper'''
+        optimizer = utils.get_optimizer(self.config, lr)
+        tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
         grads = tf.gradients(cost, tvars)
         if self.config.max_grad_norm > 0:
             grads, _ = tf.clip_by_global_norm(grads, self.config.max_grad_norm)
         return optimizer.apply_gradients(zip(grads, tvars))
 
+    def train_mle(self, cost):
+        '''Training op for MLE mode.'''
+        self.mle_lr = tf.Variable(0.0, trainable=False)
+        return self._train(self.mle_lr, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)')
+
+    def train_d(self, cost):
+        '''Training op for GAN mode, discriminator.'''
+        self.d_lr = tf.Variable(0.0, trainable=False)
+        return self._train(self.d_lr, '.*/Discriminator')
+
+    def train_g(self, cost):
+        '''Training op for GAN mode, generator.'''
+        self.g_lr = tf.Variable(0.0, trainable=False)
+        return self._train(self.g_lr, '.*/Decoder') # XXX embeddings?
+
     def assign_lr(self, session, lr_value):
         '''Change the learning rate'''
+        # TODO do different things based on MLE or GAN mode
         print 'Setting learning rate to', lr_value
         session.run(tf.assign(self.lr, lr_value))
