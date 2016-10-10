@@ -15,7 +15,7 @@ flags.DEFINE_integer("word_emb_size",     256,     "Number of learnable dimensio
                                                    "embeddings")
 flags.DEFINE_integer("num_layers",        2,       "Number of RNN layers")
 flags.DEFINE_integer("hidden_size",       192,     "RNN hidden state size")
-flags.DEFINE_float  ("decoder_dropout",   0.0,     "Decoder input word dropout probability")
+flags.DEFINE_float  ("word_dropout",      0.33,    "Word dropout probability")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("gen_sent_length",   128,     "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")

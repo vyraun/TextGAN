@@ -22,21 +22,23 @@ class EncoderDecoderModel(object):
             self.lengths = tf.placeholder(tf.int32, [config.batch_size], name='lengths')
 
             # TODO uncomment?
-            #lembs_dropped = self.word_embeddings(self.word_dropout(self.ldata))
+            #lembs = self.word_embeddings(self.ldata)
             # XXX temp:
-            lembs_dropped = tf.zeros(tf.concat(0, [tf.shape(self.ldata), [config.word_emb_size]]))
+            lembs = tf.zeros(tf.concat(0, [tf.shape(self.ldata), [config.word_emb_size]]))
             # TODO set reuse=True when above is uncommented
             rembs = self.word_embeddings(self.rdata, reuse=None)
             self.latent = self.encoder(rembs)
         else:
             # TODO this is incorrect if above uncommented! can't give proper inputs at MLE and
             #      zeros for GAN.
-            lembs_dropped = tf.zeros([config.batch_size, config.gen_sent_length,
+            lembs = tf.zeros([config.batch_size, config.gen_sent_length,
                                       config.word_emb_size])
             self.latent = tf.placeholder(tf.float32, [config.batch_size,
                                                       config.num_layers * config.hidden_size],
                                          name='gan_random_input')
-        outputs = self.decoder(lembs_dropped, self.latent)
+        outputs = self.decoder(lembs, self.latent)
+        if not mle_mode:
+            self.generated = tf.stop_gradient(self.output_words(outputs))
         d_out = self.discriminator(outputs)
         if mle_mode:
             # shift left the input to get the targets
@@ -51,7 +53,6 @@ class EncoderDecoderModel(object):
             else:
                 self.train_op = [tf.no_op(), tf.no_op()]
         else:
-            self.generated = self.output_words(outputs)
             gan_loss = self.gan_loss(d_out, 0)
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
             self.train_op = [self.train_g(-self.gan_cost), self.train_d(self.gan_cost)]
@@ -61,16 +62,6 @@ class EncoderDecoderModel(object):
         return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
                                                for _ in xrange(self.config.num_layers)],
                                            state_is_tuple=True)
-
-    def word_dropout(self, inputs):
-        '''Randomly replace words from inputs with <unk>.'''
-        if self.training and self.config.decoder_dropout > 0.0:
-            unks = tf.ones_like(inputs, tf.int32) * self.vocab.unk_index
-            mask = tf.cast(tf.greater(tf.nn.dropout(tf.cast(unks, tf.float32),
-                                                    self.config.decoder_dropout), 0.0), tf.int32)
-            return ((1 - mask) * inputs) + (mask * unks)
-        else:
-            return inputs
 
     def word_embeddings(self, inputs, reuse=False):
         '''Look up word embeddings for the input indices.'''
@@ -132,7 +123,10 @@ class EncoderDecoderModel(object):
         logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(softmax_w),
                                           name='softmax_transform_output'), softmax_b)
         logits = tf.reshape(logits, [self.config.batch_size, -1, len(self.vocab.vocab)])
-        return tf.argmax(logits, 2)
+        words = tf.slice(tf.cast(tf.argmax(logits, 2), tf.int32), [0, 0],
+                         tf.pack([-1, tf.shape(outputs)[1] - 1]))
+        return tf.concat(1, [words, tf.constant(self.vocab.eos_index,
+                                                shape=[self.config.batch_size, 1])])
 
     def discriminator(self, states):
         '''Discriminator that operates on the final states of the sentences.'''
@@ -140,9 +134,11 @@ class EncoderDecoderModel(object):
             if self.mle_mode:
                 indices = self.lengths - 2
             else:
-                # TODO get sentence lengths using MLE softmax
-                indices = tf.constant(self.config.gen_sent_length - 1,
-                                      shape=[self.config.batch_size])
+                eos_locs = tf.where(tf.equal(self.generated, self.vocab.eos_index))
+                counts = tf.unique_with_counts(eos_locs[:,0])[2]
+                meta_indices = tf.expand_dims(tf.cumsum(counts, exclusive=True), -1)
+                gather_indices = tf.concat(1, [meta_indices, tf.ones_like(meta_indices)])
+                indices = tf.cast(tf.gather_nd(eos_locs, gather_indices), tf.int32)
             final_states = utils.rowwise_lookup(states, indices) # 2D array of final states
             output = utils.linear(final_states, 1, True, 0.0, scope='discriminator_output')
         return output
