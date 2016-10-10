@@ -10,29 +10,37 @@ flags.DEFINE_string ("save_file",  "models/recent.dat", "Save file")
 flags.DEFINE_string ("load_file",  "",                  "File to load model from")
 flags.DEFINE_string ("vocab_file", "models/vocab.pk",   "Vocab pickle file")
 
-flags.DEFINE_integer("batch_size",      32,      "Batch size")
-flags.DEFINE_integer("word_emb_size",   256,     "Number of learnable dimensions in word " \
-                                                 "embeddings")
-flags.DEFINE_integer("num_layers",      2,       "Number of RNN layers")
-flags.DEFINE_integer("hidden_size",     192,     "RNN hidden state size")
-flags.DEFINE_float  ("decoder_dropout", 0.0,     "Decoder input word dropout probability")
-flags.DEFINE_integer("softmax_samples", 1000,    "Number of classes to sample for softmax")
-flags.DEFINE_float  ("max_grad_norm",   5.0,     "Gradient clipping")
-flags.DEFINE_bool   ("training",        True,    "Training mode, turn off for testing")
-flags.DEFINE_string ("optimizer",       "adam",  "Optimizer to use (sgd, adam, adagrad, adadelta)")
-flags.DEFINE_float  ("learning_rate",   1e-3,    "Optimizer initial learning rate")
-flags.DEFINE_integer("max_epoch",       50,      "Maximum number of epochs to run for")
-flags.DEFINE_integer("max_steps",       9999999, "Maximum number of steps to run for")
+flags.DEFINE_integer("batch_size",        32,      "Batch size")
+flags.DEFINE_integer("word_emb_size",     256,     "Number of learnable dimensions in word " \
+                                                   "embeddings")
+flags.DEFINE_integer("num_layers",        2,       "Number of RNN layers")
+flags.DEFINE_integer("hidden_size",       192,     "RNN hidden state size")
+flags.DEFINE_float  ("decoder_dropout",   0.0,     "Decoder input word dropout probability")
+flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
+flags.DEFINE_integer("gen_sent_length",   128,     "Maximum length of a generated sentence")
+flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
+flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
+flags.DEFINE_string ("optimizer",         "adam",  "Optimizer to use (sgd, adam, adagrad, " \
+                                                   "adadelta)")
+flags.DEFINE_float  ("mle_learning_rate", 1e-3,    "Optimizer initial learning rate for MLE")
+flags.DEFINE_float  ("d_learning_rate",   1e-3,    "Optimizer initial learning rate for " \
+                                                   "discriminator")
+flags.DEFINE_float  ("g_learning_rate",   1e-3,    "Optimizer initial learning rate for generator")
+flags.DEFINE_integer("max_epoch",         50,      "Maximum number of epochs to run for")
+flags.DEFINE_integer("max_steps",         9999999, "Maximum number of steps to run for")
 
-flags.DEFINE_integer("print_every",     50,      "Print every these many steps")
-flags.DEFINE_integer("save_every",      -1,      "Save every these many steps (0 to disable, " \
-                                                 "-1 for each epoch)")
-flags.DEFINE_bool   ("save_overwrite",  True,    "Overwrite the same file each time")
-flags.DEFINE_integer("validate_every",  1,       "Validate every these many epochs (0 to disable)")
+flags.DEFINE_integer("gen_samples",       1,       "Number of demo samples batches to generate " \
+                                                   "per epoch")
+flags.DEFINE_integer("print_every",       50,      "Print every these many steps")
+flags.DEFINE_integer("save_every",        -1,      "Save every these many steps (0 to disable, " \
+                                                   "-1 for each epoch)")
+flags.DEFINE_bool   ("save_overwrite",    True,    "Overwrite the same file each time")
+flags.DEFINE_integer("validate_every",    1,       "Validate every these many epochs " \
+                                                   "(0 to disable)")
 
 # sanity check options
-flags.DEFINE_bool   ("force_nolatent",  False,   "Force no latent input for decoder")
-flags.DEFINE_bool   ("force_noinputs",  False,   "Force no true inputs for decoder")
+flags.DEFINE_bool   ("force_nolatent",    False,   "Force no latent input for decoder")
+flags.DEFINE_bool   ("force_noinputs",    False,   "Force no true inputs for decoder")
 
 
 class Config(object):

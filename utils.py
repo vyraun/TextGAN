@@ -63,6 +63,18 @@ def get_optimizer(config, lr):
     return optimizer
 
 
+def rowwise_lookup(params, indices):
+    '''Look up an index from each row of params as per indices.'''
+    shape = params.get_shape().as_list()
+    if len(shape) == 2:
+        hidden_size = 1
+    else:
+        hidden_size = shape[-1]
+    flattened = tf.reshape(params, [-1, hidden_size])
+    flattened_indices = indices + (tf.range(shape[0]) * tf.shape(params)[1])
+    return tf.gather(flattened, flattened_indices)
+
+
 def linear(args, output_size, bias, bias_start=0.0, scope=None):
     """Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
     Args:

@@ -11,12 +11,25 @@ from encdec import EncoderDecoderModel
 from reader import Reader, Vocab
 
 
-def call_session(session, model, batch):
+def call_mle_session(session, model, batch):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.ldata: batch[0], model.rdata: batch[1], model.lengths: batch[2]}
     # model.train_op will be tf.no_op() for a non-training model
-    ret = session.run([model.nll, model.mle_cost, model.gan_cost, model.train_op], f_dict)
-    return ret[:-1]
+    return session.run([model.nll, model.mle_cost, model.gan_cost, model.train_op], f_dict)[:-1]
+
+
+def call_gan_session(session, model, latent_dims):
+    '''Use the session to train the generator of the GAN with fake samples.'''
+    # XXX z from normal distribution may not be a good assumption, since encoded samples may not
+    #     come from that.
+    f_dict = {model.latent: np.clip(np.random.normal(scale=0.5, size=latent_dims), -1.0, 1.0)}
+    # model.train_op will be tf.no_op() for a non-training model
+    return session.run([model.gan_cost, model.train_op], f_dict)[:-1]
+
+
+def generate_sentences(session, model, latent_dims):
+    '''Generate novel sentences using the generator.'''
+    pass # TODO
 
 
 def save_model(session, saver, config, perp, cur_iters):
@@ -29,7 +42,8 @@ def save_model(session, saver, config, perp, cur_iters):
     print "Saved to", save_file
 
 
-def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver, steps, max_steps):
+def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver, steps, max_steps,
+              gen_samples=0):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -42,7 +56,10 @@ def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver,
     shortterm_iters = 0
 
     for step, batch in enumerate(batch_loader):
-        nll, mle_cost, gan_cost = call_session(session, mle_model, batch) # TODO GAN updates?
+        nll, mle_cost, d_cost = call_mle_session(session, mle_model, batch)
+        g_cost = call_gan_session(session, gan_model, [config.batch_size,
+                                                       config.num_layers * config.hidden_size])
+        gan_cost = (g_cost + d_cost) / 2
 
         nlls += nll
         mle_costs += mle_cost
@@ -77,6 +94,9 @@ def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver,
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
+    for _ in xrange(gan_samples):
+        generate_sentences(session, gan_model, [config.batch_size,
+                                                config.num_layers * config.hidden_size])
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
     if saver is not None and config.save_every < 0:
@@ -96,12 +116,15 @@ def main(_):
         if config.training:
             with tf.variable_scope("Model", reuse=None):
                 mle_model = EncoderDecoderModel(config, vocab, True, True)
-                gan_model = EncoderDecoderModel(config, vocab, True, False)
             with tf.variable_scope("Model", reuse=True):
-                eval_model = EncoderDecoderModel(config, vocab, False, True)
+                gan_model = EncoderDecoderModel(config, vocab, True, False)
+                eval_mle_model = EncoderDecoderModel(config, vocab, False, True)
+                eval_gan_model = EncoderDecoderModel(config, vocab, False, False)
         else:
             with tf.variable_scope("Model", reuse=None):
-                test_model = EncoderDecoderModel(config, vocab, False, True)
+                test_mle_model = EncoderDecoderModel(config, vocab, False, True)
+            with tf.variable_scope("Model", reuse=True):
+                test_gan_model = EncoderDecoderModel(config, vocab, False, False)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
@@ -119,9 +142,9 @@ def main(_):
             steps = 0
             train_perps = []
             valid_perps = []
-            mle_model.assign_lr(session, config.learning_rate)
-            gan_model.assign_d_lr(session, config.learning_rate) # TODO different learning rates
-            gan_model.assign_g_lr(session, config.learning_rate) # TODO ^
+            mle_model.assign_mle_lr(session, config.mle_learning_rate)
+            gan_model.assign_d_lr(session, config.d_learning_rate)
+            gan_model.assign_g_lr(session, config.g_learning_rate)
             for i in xrange(config.max_epoch):
                 print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
                       "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
@@ -131,8 +154,9 @@ def main(_):
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
-                    perplexity, _ = run_epoch(session, eval_model, None, reader.validation(),
-                                              config, vocab, None, 0, -1)
+                    perplexity, _ = run_epoch(session, eval_mle_model, eval_gan_model,
+                                              reader.validation(), config, vocab, None, 0, -1,
+                                              gen_samples=config.gen_samples)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                     valid_perps.append(perplexity)
                 else:
@@ -143,8 +167,9 @@ def main(_):
                     break
         else:
             print '\nTesting'
-            perplexity, _ = run_epoch(session, test_model, None, reader.testing(), config, vocab,
-                                      None, 0, config.max_steps)
+            perplexity, _ = run_epoch(session, test_mle_model, test_gan_model, reader.testing(),
+                                      config, vocab, None, 0, config.max_steps,
+                                      gen_samples=config.gan_samples)
             print "Test Perplexity: %.3f" % perplexity
 
 
