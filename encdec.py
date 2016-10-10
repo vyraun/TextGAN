@@ -60,7 +60,10 @@ class EncoderDecoderModel(object):
         else:
             gan_loss = self.gan_loss(d_out, 0)
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
-            self.train_op = [self.train_g(-self.gan_cost), self.train_d(self.gan_cost)]
+            if training:
+                self.train_op = [self.train_g(-self.gan_cost), self.train_d(self.gan_cost)]
+            else:
+                self.train_op = [tf.no_op(), tf.no_op()]
 
     def rnn_cell(self, latent=None):
         '''Return a multi-layer RNN cell.'''
