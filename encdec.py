@@ -21,11 +21,16 @@ class EncoderDecoderModel(object):
             # sentence lengths
             self.lengths = tf.placeholder(tf.int32, [config.batch_size], name='lengths')
 
-            lembs_dropped = self.word_embeddings(self.word_dropout(self.ldata))
-            rembs = self.word_embeddings(self.rdata, reuse=True)
+            # TODO uncomment?
+            #lembs_dropped = self.word_embeddings(self.word_dropout(self.ldata))
+            # XXX temp:
+            lembs_dropped = tf.zeros(tf.concat(0, [tf.shape(self.ldata), [config.word_emb_size]]))
+            # TODO set reuse=True when above is uncommented
+            rembs = self.word_embeddings(self.rdata, reuse=None)
             self.latent = self.encoder(rembs)
         else:
-            # TODO this is incorrect! can't give proper inputs at MLE and zeros for GAN.
+            # TODO this is incorrect if above uncommented! can't give proper inputs at MLE and
+            #      zeros for GAN.
             lembs_dropped = tf.zeros([config.batch_size, config.gen_sent_length,
                                       config.word_emb_size])
             self.latent = tf.placeholder(tf.float32, [config.batch_size,
@@ -46,9 +51,10 @@ class EncoderDecoderModel(object):
             else:
                 self.train_op = [tf.no_op(), tf.no_op()]
         else:
+            self.generated = self.output_words(outputs)
             gan_loss = self.gan_loss(d_out, 0)
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
-            self.train_op = [self.train_g(self.gan_cost), self.train_d(self.gan_cost)]
+            self.train_op = [self.train_g(-self.gan_cost), self.train_d(self.gan_cost)]
 
     def rnn_cell(self, latent=None):
         '''Return a multi-layer RNN cell.'''
@@ -120,9 +126,13 @@ class EncoderDecoderModel(object):
         return tf.reshape(loss, [self.config.batch_size, -1])
 
     def output_words(self, outputs):
+        '''Get output words from RNN outputs.'''
         softmax_w, softmax_b = self._mle_softmax_vars()
+        output = tf.reshape(tf.concat(1, outputs), [-1, self.config.hidden_size])
         logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(softmax_w),
                                           name='softmax_transform_output'), softmax_b)
+        logits = tf.reshape(logits, [self.config.batch_size, -1, len(self.vocab.vocab)])
+        return tf.argmax(logits, 2)
 
     def discriminator(self, states):
         '''Discriminator that operates on the final states of the sentences.'''

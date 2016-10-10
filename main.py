@@ -18,18 +18,33 @@ def call_mle_session(session, model, batch):
     return session.run([model.nll, model.mle_cost, model.gan_cost, model.train_op], f_dict)[:-1]
 
 
+def get_latent_representation(latent_dims):
+    '''Generate a random latent representation to generate text from.'''
+    return np.clip(np.random.normal(scale=0.5, size=latent_dims), -1.0, 1.0)
+
+
 def call_gan_session(session, model, latent_dims):
     '''Use the session to train the generator of the GAN with fake samples.'''
     # XXX z from normal distribution may not be a good assumption, since encoded samples may not
     #     come from that.
-    f_dict = {model.latent: np.clip(np.random.normal(scale=0.5, size=latent_dims), -1.0, 1.0)}
+    f_dict = {model.latent: get_latent_representation(latent_dims)}
     # model.train_op will be tf.no_op() for a non-training model
     return session.run([model.gan_cost, model.train_op], f_dict)[:-1]
 
 
-def generate_sentences(session, model, latent_dims):
+def generate_sentences(session, model, latent_dims, vocab):
     '''Generate novel sentences using the generator.'''
-    pass # TODO
+    f_dict = {model.latent: get_latent_representation(latent_dims)}
+    output = session.run(model.generated, f_dict)
+    print '\nVisualizing new batch!'
+    for i, sent in enumerate(output):
+        print 'Sentence %d:' % i,
+        for word in sent:
+            if word == vocab.eos_index:
+                break
+            print vocab.vocab[word],
+        print
+    print
 
 
 def save_model(session, saver, config, perp, cur_iters):
@@ -94,9 +109,9 @@ def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver,
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
-    for _ in xrange(gan_samples):
+    for _ in xrange(gen_samples):
         generate_sentences(session, gan_model, [config.batch_size,
-                                                config.num_layers * config.hidden_size])
+                                                config.num_layers * config.hidden_size], vocab)
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
     if saver is not None and config.save_every < 0:
