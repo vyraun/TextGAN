@@ -120,6 +120,15 @@ class Reader(object):
         for batch in self.buffered_read([pjoin(self.config.data_path, 'test.txt')]):
             yield batch
 
+    def _word_dropout(self, sent):
+        ret = []
+        for word in sent:
+            if random.random() < self.config.word_dropout:
+                ret.append(self.vocab.unk_index)
+            else:
+                ret.append(word)
+        return ret
+
     def pack(self, batch):
         '''Pack python-list batches into numpy batches'''
         max_size = max(len(s) for s in batch)
@@ -127,12 +136,17 @@ class Reader(object):
             batch.extend([[] for _ in xrange(self.config.batch_size - len(batch))])
         leftalign_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
         rightalign_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
+        leftalign_drop_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
+        rightalign_drop_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
         sent_lengths = np.zeros([self.config.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
             rightalign_batch[i, -len(s)+1:] = s[:-1] # no <eos>
+            leftalign_drop_batch[i, :len(s)] = [s[0]] + self._word_dropout(s[1:-1]) + [s[-1]]
+            rightalign_drop_batch[i, -len(s)+1:] = [s[0]] + self._word_dropout(s[1:-1]) # no <eos>
             sent_lengths[i] = len(s)
-        return leftalign_batch, rightalign_batch, sent_lengths
+        return (leftalign_batch, rightalign_batch, leftalign_drop_batch, rightalign_drop_batch,
+                sent_lengths)
 
 
 def main(_):

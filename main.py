@@ -13,7 +13,11 @@ from reader import Reader, Vocab
 
 def call_mle_session(session, model, batch):
     '''Use the session to run the model on the batch data.'''
-    f_dict = {model.ldata: batch[0], model.rdata: batch[1], model.lengths: batch[2]}
+    f_dict = {model.ldata: batch[0],
+              model.rdata: batch[1],
+              model.ldata_dropped: batch[2],
+              model.rdata_dropped: batch[3],
+              model.lengths: batch[4]}
     # model.train_op will be tf.no_op() for a non-training model
     return session.run([model.nll, model.mle_cost, model.gan_cost, model.train_op], f_dict)[:-1]
 

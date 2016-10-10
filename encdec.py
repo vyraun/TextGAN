@@ -20,14 +20,19 @@ class EncoderDecoderModel(object):
             self.rdata = tf.placeholder(tf.int32, [config.batch_size, None], name='rdata')
             # sentence lengths
             self.lengths = tf.placeholder(tf.int32, [config.batch_size], name='lengths')
+            # sentences with word dropout
+            self.ldata_dropped = tf.placeholder(tf.int32, [config.batch_size, None],
+                                                name='ldata_dropped')
+            self.rdata_dropped = tf.placeholder(tf.int32, [config.batch_size, None],
+                                                name='rdata_dropped')
 
             # TODO uncomment?
             #lembs = self.word_embeddings(self.ldata)
             # XXX temp:
             lembs = tf.zeros(tf.concat(0, [tf.shape(self.ldata), [config.word_emb_size]]))
             # TODO set reuse=True when above is uncommented
-            rembs = self.word_embeddings(self.rdata, reuse=None)
-            self.latent = self.encoder(rembs)
+            rembs_dropped = self.word_embeddings(self.rdata_dropped, reuse=None)
+            self.latent = self.encoder(rembs_dropped)
         else:
             # TODO this is incorrect if above uncommented! can't give proper inputs at MLE and
             #      zeros for GAN.
