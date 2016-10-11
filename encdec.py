@@ -13,6 +13,9 @@ class EncoderDecoderModel(object):
         self.training = training
         self.mle_mode = mle_mode
 
+        self.embedding = self.word_embedding_matrix()
+        self.softmax_w, self.softmax_b = self.softmax_variables()
+
         if mle_mode:
             # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
             self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
@@ -26,22 +29,20 @@ class EncoderDecoderModel(object):
             self.rdata_dropped = tf.placeholder(tf.int32, [config.batch_size, None],
                                                 name='rdata_dropped')
 
-            # TODO uncomment?
-            #lembs = self.word_embeddings(self.ldata)
-            # XXX temp:
-            lembs = tf.zeros(tf.concat(0, [tf.shape(self.ldata), [config.word_emb_size]]))
-            # TODO set reuse=True when above is uncommented
-            rembs_dropped = self.word_embeddings(self.rdata_dropped, reuse=None)
+            lembs = self.word_embeddings(self.ldata)
+            rembs_dropped = self.word_embeddings(self.rdata_dropped)
             self.latent = self.encoder(rembs_dropped)
         else:
-            # TODO this is incorrect if above uncommented! can't give proper inputs at MLE and
-            #      zeros for GAN.
-            lembs = tf.zeros([config.batch_size, config.gen_sent_length,
-                                      config.word_emb_size])
+            # only the first timestep input will actually be considered
+            lembs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[config.batch_size, 1]))
+            # so the rest can be zeros
+            lembs = tf.concat(1, [lembs, tf.zeros([config.batch_size, config.gen_sent_length - 1,
+                                                   config.word_emb_size])])
             self.latent = tf.placeholder(tf.float32, [config.batch_size,
                                                       config.num_layers * config.hidden_size],
                                          name='gan_random_input')
         outputs = self.decoder(lembs, self.latent)
+
         if not mle_mode:
             self.generated = tf.stop_gradient(self.output_words(outputs))
         d_out = self.discriminator(outputs)
@@ -65,19 +66,35 @@ class EncoderDecoderModel(object):
             else:
                 self.train_op = [tf.no_op(), tf.no_op()]
 
-    def rnn_cell(self, latent=None):
+    def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None):
         '''Return a multi-layer RNN cell.'''
-        return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
+        return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent,
+                                                           embedding=embedding, softmax_w=softmax_w,
+                                                           softmax_b=softmax_b)
                                                for _ in xrange(self.config.num_layers)],
                                            state_is_tuple=True)
 
-    def word_embeddings(self, inputs, reuse=False):
-        '''Look up word embeddings for the input indices.'''
-        with tf.device('/cpu:0') and tf.variable_scope("Embeddings", reuse=reuse):
+    def word_embedding_matrix(self):
+        '''Define the word embedding matrix.'''
+        with tf.device('/cpu:0') and tf.variable_scope("Embeddings"):
             embedding = tf.get_variable('word_embedding', [len(self.vocab.vocab),
                                                            self.config.word_emb_size],
                                         initializer=tf.random_uniform_initializer(-1.0, 1.0))
-            embeds = tf.nn.embedding_lookup(embedding, inputs, name='word_embedding_lookup')
+        return embedding
+
+    def softmax_variables(self):
+        '''Define the softmax weight and bias variables.'''
+        with tf.variable_scope("MLE_Softmax"):
+            softmax_w = tf.get_variable("W", [len(self.vocab.vocab), self.config.hidden_size],
+                                        initializer=tf.contrib.layers.xavier_initializer())
+            softmax_b = tf.get_variable("b", [len(self.vocab.vocab)],
+                                        initializer=tf.zeros_initializer)
+        return softmax_w, softmax_b
+
+    def word_embeddings(self, inputs):
+        '''Look up word embeddings for the input indices.'''
+        with tf.device('/cpu:0') and tf.variable_scope("Embeddings"):
+            embeds = tf.nn.embedding_lookup(self.embedding, inputs, name='word_embedding_lookup')
         return embeds
 
     def encoder(self, inputs):
@@ -94,31 +111,27 @@ class EncoderDecoderModel(object):
         if self.config.force_noinputs:
             inputs = tf.zeros_like(inputs)
         with tf.variable_scope("Decoder"):
-            outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
+            if self.mle_mode:
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
+            else:
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, self.embedding, self.softmax_w,
+                                                             self.softmax_b), inputs,
+                                               dtype=tf.float32)
         return outputs
-
-    def _mle_softmax_vars(self, reuse=True):
-        with tf.variable_scope("MLE_Softmax", reuse=reuse):
-            softmax_w = tf.get_variable("W", [len(self.vocab.vocab), self.config.hidden_size],
-                                        initializer=tf.contrib.layers.xavier_initializer())
-            softmax_b = tf.get_variable("b", [len(self.vocab.vocab)],
-                                        initializer=tf.zeros_initializer)
-        return softmax_w, softmax_b
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
         mask = tf.cast(tf.greater(targets, 0, name='targets_mask'), tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, self.config.hidden_size])
-        softmax_w, softmax_b = self._mle_softmax_vars(None)
         if self.training and self.config.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])
             mask = tf.reshape(mask, [-1])
-            loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, output, targets,
+            loss = tf.nn.sampled_softmax_loss(self.softmax_w, self.softmax_b, output, targets,
                                               self.config.softmax_samples, len(self.vocab.vocab))
             loss *= mask
         else:
-            logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(softmax_w),
-                                              name='softmax_transform_mle'), softmax_b)
+            logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(self.softmax_w),
+                                              name='softmax_transform_mle'), self.softmax_b)
             loss = tf.nn.seq2seq.sequence_loss_by_example([logits],
                                                           [tf.reshape(targets, [-1])],
                                                           [tf.reshape(mask, [-1])])
@@ -126,10 +139,9 @@ class EncoderDecoderModel(object):
 
     def output_words(self, outputs):
         '''Get output words from RNN outputs.'''
-        softmax_w, softmax_b = self._mle_softmax_vars()
         output = tf.reshape(tf.concat(1, outputs), [-1, self.config.hidden_size])
-        logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(softmax_w),
-                                          name='softmax_transform_output'), softmax_b)
+        logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(self.softmax_w),
+                                          name='softmax_transform_output'), self.softmax_b)
         logits = tf.reshape(logits, [self.config.batch_size, -1, len(self.vocab.vocab)])
         words = tf.slice(tf.cast(tf.argmax(logits, 2), tf.int32), [0, 0],
                          tf.pack([-1, tf.shape(outputs)[1] - 1]))
@@ -178,7 +190,8 @@ class EncoderDecoderModel(object):
     def train_g(self, cost):
         '''Training op for GAN mode, generator.'''
         self.g_lr = tf.Variable(0.0, trainable=False)
-        return self._train(self.g_lr, cost, '.*/Decoder') # XXX embeddings?
+        # don't update embeddings, just update the generated distributions
+        return self._train(self.g_lr, cost, '.*/Decoder')
 
     def assign_mle_lr(self, session, lr_value):
         '''Change the MLE learning rate'''

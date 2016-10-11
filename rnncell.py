@@ -8,10 +8,19 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
        This variant can be conditioned on a provided latent variable.
        Based on the code from TensorFlow."""
 
-    def __init__(self, num_units, latent=None, activation=tf.nn.tanh):
+    def __init__(self, num_units, latent=None, embedding=None, softmax_w=None, softmax_b=None,
+                 activation=tf.nn.tanh):
+        '''If embedding are not None, only the first timestep input is considered and the rest
+           come from previous timesteps, using the softmax variables passed.''' # TODO
         self.num_units = num_units
         self.latent = latent
         self.activation = activation
+        if not (embedding is not None and softmax_w is not None and softmax_b is not None) and \
+           not (embedding is None and softmax_w is None and softmax_b is None):
+            raise ValueError('Embedding and softmax vars have to be all None or all not None.')
+        self.embedding = embedding
+        self.softmax_w = softmax_w
+        self.softmax_b = softmax_b
 
     @property
     def state_size(self):
@@ -22,7 +31,7 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
         return self.num_units
 
     def __call__(self, inputs, state, scope=None):
-        """Gated recurrent unit (GRU) with nunits cells."""
+        """Gated recurrent unit (GRU) with num_units cells."""
         with tf.variable_scope(scope or type(self).__name__): # "GRUCell"
             with tf.variable_scope("Gates"): # Reset gate and update gate.
                 # We start with bias of 1.0 to not reset and not update.
