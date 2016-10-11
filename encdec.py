@@ -66,11 +66,9 @@ class EncoderDecoderModel(object):
             else:
                 self.train_op = [tf.no_op(), tf.no_op()]
 
-    def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None):
+    def rnn_cell(self, latent=None):
         '''Return a multi-layer RNN cell.'''
-        return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent,
-                                                           embedding=embedding, softmax_w=softmax_w,
-                                                           softmax_b=softmax_b)
+        return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
                                                for _ in xrange(self.config.num_layers)],
                                            state_is_tuple=True)
 
@@ -111,12 +109,7 @@ class EncoderDecoderModel(object):
         if self.config.force_noinputs:
             inputs = tf.zeros_like(inputs)
         with tf.variable_scope("Decoder"):
-            if self.mle_mode:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
-            else:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, self.embedding, self.softmax_w,
-                                                             self.softmax_b), inputs,
-                                               dtype=tf.float32)
+            outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
         return outputs
 
     def mle_loss(self, outputs, targets):

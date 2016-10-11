@@ -8,19 +8,10 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
        This variant can be conditioned on a provided latent variable.
        Based on the code from TensorFlow."""
 
-    def __init__(self, num_units, latent=None, embedding=None, softmax_w=None, softmax_b=None,
-                 activation=tf.nn.tanh):
-        '''If embedding are not None, only the first timestep input is considered and the rest
-           come from previous timesteps, using the softmax variables passed.''' # TODO
+    def __init__(self, num_units, latent=None, activation=tf.nn.tanh):
         self.num_units = num_units
         self.latent = latent
         self.activation = activation
-        if not (embedding is not None and softmax_w is not None and softmax_b is not None) and \
-           not (embedding is None and softmax_w is None and softmax_b is None):
-            raise ValueError('Embedding and softmax vars have to be all None or all not None.')
-        self.embedding = embedding
-        self.softmax_w = softmax_w
-        self.softmax_b = softmax_b
 
     @property
     def state_size(self):
