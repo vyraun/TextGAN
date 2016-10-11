@@ -68,9 +68,8 @@ class EncoderDecoderModel(object):
 
     def rnn_cell(self, latent=None):
         '''Return a multi-layer RNN cell.'''
-        return tf.nn.rnn_cell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
-                                               for _ in xrange(self.config.num_layers)],
-                                           state_is_tuple=True)
+        return rnncell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
+                                         for _ in xrange(self.config.num_layers)])
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''

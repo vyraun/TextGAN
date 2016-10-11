@@ -40,41 +40,41 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
         return new_h, new_h
 
 
-class LSTMCell(tf.nn.rnn_cell.RNNCell):
-    """Basic LSTM recurrent network cell (http://arxiv.org/abs/1409.2329).
-       Based on the code from TensorFlow."""
+class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
+    """RNN cell composed sequentially of multiple simple cells."""
 
-    def __init__(self, num_units, forget_bias=1.0, activation=tf.nn.tanh):
-        """Initialize the basic LSTM cell.
-           Args:
-             num_units: int, The number of units in the LSTM cell.
-             forget_bias: float, The bias added to forget gates.
-             activation: Activation function of the inner states."""
-        self.num_units = num_units
-        self.forget_bias = forget_bias
-        self.activation = activation
+    def __init__(self, cells):
+        """Create a RNN cell composed sequentially of a number of RNNCells.
+        Args:
+            cells: list of RNNCells that will be composed in this order.
+        """
+        if not cells:
+            raise ValueError("Must specify at least one cell for MultiRNNCell.")
+        self.cells = cells
 
     @property
     def state_size(self):
-        return tf.nn.rnn_cell.LSTMStateTuple(self.num_units, self.num_units)
+        return tuple(cell.state_size for cell in self.cells)
 
     @property
     def output_size(self):
-        return self.num_units
+        return self.cells[-1].output_size
 
     def __call__(self, inputs, state, scope=None):
-        """Long short-term memory cell (LSTM)."""
-        with tf.variable_scope(scope or type(self).__name__): # "BasicLSTMCell"
-            # Parameters of gates are concatenated into one multiply for efficiency.
-            c, h = state
-            concat = utils.linear([inputs, h], 4 * self.num_units, True)
+        """Run this multi-layer cell on inputs, starting from state."""
+        with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
+            cur_state_pos = 0
+            cur_inp = inputs
+            new_states = []
+            for i, cell in enumerate(self.cells):
+                with tf.variable_scope("Cell%d" % i):
+                    if not tf.nn.nest.is_sequence(state):
+                        raise ValueError(
+                                       "Expected state to be a tuple of length %d, but received: %s"
+                                       % (len(self.state_size), state))
+                    cur_state = state[i]
+                    cur_inp, new_state = cell(cur_inp, cur_state)
+                    new_states.append(new_state)
+        new_states = tuple(new_states)
+        return cur_inp, new_states
 
-            # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-            i, j, f, o = tf.split(1, 4, concat)
-
-            new_c = (c * tf.nn.sigmoid(f + self.forget_bias) + tf.nn.sigmoid(i) * \
-                     self.activation(j))
-            new_h = self.activation(new_c) * tf.nn.sigmoid(o)
-
-            new_state = tf.nn.rnn_cell.LSTMStateTuple(new_c, new_h)
-            return new_h, new_state
