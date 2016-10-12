@@ -11,15 +11,19 @@ from encdec import EncoderDecoderModel
 from reader import Reader, Vocab
 
 
-def call_mle_session(session, model, batch):
+def call_mle_session(session, model, batch, use_gan):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.ldata: batch[0],
               model.rdata: batch[1],
               model.ldata_dropped: batch[2],
               model.rdata_dropped: batch[3],
               model.lengths: batch[4]}
+    ops = [model.nll, model.mle_cost]
+    if use_gan:
+        ops.append(model.gan_cost)
     # model.train_op will be tf.no_op() for a non-training model
-    return session.run([model.nll, model.mle_cost, model.gan_cost, model.train_op], f_dict)[:-1]
+    ops.append(model.train_op)
+    return session.run(ops, f_dict)[:-1]
 
 
 def get_latent_representation(latent_dims):
@@ -62,7 +66,7 @@ def save_model(session, saver, config, perp, cur_iters):
 
 
 def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver, steps, max_steps,
-              gen_samples=0):
+              gen_samples=0, use_gan=True):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -75,10 +79,14 @@ def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver,
     shortterm_iters = 0
 
     for step, batch in enumerate(batch_loader):
-        nll, mle_cost, d_cost = call_mle_session(session, mle_model, batch)
-        g_cost = call_gan_session(session, gan_model, [config.batch_size,
-                                                       config.num_layers * config.hidden_size])
-        gan_cost = (g_cost + d_cost) / 2
+        if use_gan:
+            nll, mle_cost, d_cost = call_mle_session(session, mle_model, batch, use_gan=True)
+            g_cost = call_gan_session(session, gan_model, [config.batch_size,
+                                                           config.num_layers * config.hidden_size])
+            gan_cost = (g_cost + d_cost) / 2
+        else:
+            nll, mle_cost = call_mle_session(session, mle_model, batch, use_gan=False)
+            gan_cost = 0.0
 
         nlls += nll
         mle_costs += mle_cost
@@ -113,9 +121,10 @@ def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver,
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
-    for _ in xrange(gen_samples):
-        generate_sentences(session, gan_model, [config.batch_size,
-                                                config.num_layers * config.hidden_size], vocab)
+    if use_gan:
+        for _ in xrange(gen_samples):
+            generate_sentences(session, gan_model, [config.batch_size,
+                                                    config.num_layers * config.hidden_size], vocab)
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
     if saver is not None and config.save_every < 0:
@@ -164,20 +173,25 @@ def main(_):
             mle_model.assign_mle_lr(session, config.mle_learning_rate)
             gan_model.assign_d_lr(session, config.d_learning_rate)
             gan_model.assign_g_lr(session, config.g_learning_rate)
-            mle_model.enable_gan() # TODO do this after config.gan_wait_epochs epochs
-            gan_model.enable_gan()
+            use_gan = False
             for i in xrange(config.max_epoch):
+                if i == config.gan_wait_epochs:
+                    print 'Enabling GAN training!'
+                    mle_model.enable_gan()
+                    gan_model.enable_gan()
+                    use_gan = True
                 print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
                       "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
                                            session.run(gan_model.d_lr), session.run(gan_model.g_lr))
                 perplexity, steps = run_epoch(session, mle_model, gan_model, reader.training(),
-                                              config, vocab, saver, steps, config.max_steps)
+                                              config, vocab, saver, steps, config.max_steps,
+                                              use_gan=use_gan)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
                     perplexity, _ = run_epoch(session, eval_mle_model, eval_gan_model,
                                               reader.validation(), config, vocab, None, 0, -1,
-                                              gen_samples=config.gen_samples)
+                                              gen_samples=config.gen_samples, use_gan=use_gan)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                     valid_perps.append(perplexity)
                 else:
