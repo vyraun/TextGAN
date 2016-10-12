@@ -66,10 +66,11 @@ class EncoderDecoderModel(object):
             else:
                 self.train_op = [tf.no_op(), tf.no_op()]
 
-    def rnn_cell(self, latent=None):
+    def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None):
         '''Return a multi-layer RNN cell.'''
         return rnncell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
-                                         for _ in xrange(self.config.num_layers)])
+                                         for _ in xrange(self.config.num_layers)],
+                                    embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b)
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''
@@ -108,8 +109,13 @@ class EncoderDecoderModel(object):
         if self.config.force_noinputs:
             inputs = tf.zeros_like(inputs)
         with tf.variable_scope("Decoder"):
-            outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
-        return outputs
+            if self.mle_mode:
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
+            else:
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, self.embedding, self.softmax_w,
+                                                             self.softmax_b), inputs,
+                                               dtype=tf.float32)
+        return outputs # FIXME these are only the states of the topmost layer!
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''

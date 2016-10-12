@@ -43,18 +43,31 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
 class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
     """RNN cell composed sequentially of multiple simple cells."""
 
-    def __init__(self, cells):
-        """Create a RNN cell composed sequentially of a number of RNNCells.
-        Args:
-            cells: list of RNNCells that will be composed in this order.
+    def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None):
+        """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
+           None, the output of the previous timestep is used for the current time step using the
+           softmax variables.
         """
         if not cells:
             raise ValueError("Must specify at least one cell for MultiRNNCell.")
         self.cells = cells
+        if not (embedding is None and softmax_w is None and softmax_b is None) and \
+           not (embedding is not None and softmax_w is not None and softmax_b is not None):
+            raise ValueError('Embedding and softmax variables have to all be None or all not None.')
+        self.embedding = embedding
+        self.softmax_w = softmax_w
+        self.softmax_b = softmax_b
+        if embedding is not None:
+            self.word_emb_size = embedding.get_shape()[1]
+        else:
+            self.word_emb_size = 0
 
     @property
     def state_size(self):
-        return tuple(cell.state_size for cell in self.cells)
+        sizes = [cell.state_size for cell in self.cells]
+        if self.word_emb_size:
+            sizes.extend([self.word_emb_size, 1])
+        return tuple(sizes)
 
     @property
     def output_size(self):
@@ -64,10 +77,14 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         """Run this multi-layer cell on inputs, starting from state."""
         with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
             cur_state_pos = 0
+            if self.embedding is not None:
+                cur_inp = tf.select(tf.greater(state[-1][:,0], 0.5), state[-2], inputs)
+            else:
+                cur_inp = inputs
             cur_inp = inputs
             new_states = []
             for i, cell in enumerate(self.cells):
-                with tf.variable_scope("Cell%d" % i):
+                with tf.variable_scope("Layer%d" % i):
                     if not tf.nn.nest.is_sequence(state):
                         raise ValueError(
                                        "Expected state to be a tuple of length %d, but received: %s"
@@ -75,6 +92,13 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                     cur_state = state[i]
                     cur_inp, new_state = cell(cur_inp, cur_state)
                     new_states.append(new_state)
+            if self.embedding is not None:
+                logits = tf.nn.bias_add(tf.matmul(cur_inp, tf.transpose(self.softmax_w),
+                                                  name='Softmax_transform'),
+                                        self.softmax_b) # TODO do a sparse approximation?
+                sm = tf.nn.softmax(logits, name='Softmax')
+                new_states.append(tf.matmul(sm, self.embedding))
+                new_states.append(tf.ones([sm.get_shape()[0], 1]))
         new_states = tuple(new_states)
         return cur_inp, new_states
 
