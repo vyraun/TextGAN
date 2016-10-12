@@ -30,7 +30,7 @@ def get_latent_representation(latent_dims):
 def call_gan_session(session, model, latent_dims):
     '''Use the session to train the generator of the GAN with fake samples.'''
     # XXX z from normal distribution may not be a good assumption, since encoded samples may not
-    #     come from that.
+    #     come from that. encourage encoder outputs to live in this prior?
     f_dict = {model.latent: get_latent_representation(latent_dims)}
     # model.train_op will be tf.no_op() for a non-training model
     return session.run([model.gan_cost, model.train_op], f_dict)[:-1]
@@ -164,6 +164,8 @@ def main(_):
             mle_model.assign_mle_lr(session, config.mle_learning_rate)
             gan_model.assign_d_lr(session, config.d_learning_rate)
             gan_model.assign_g_lr(session, config.g_learning_rate)
+            mle_model.enable_gan() # TODO do this after config.gan_wait_epochs epochs
+            gan_model.enable_gan()
             for i in xrange(config.max_epoch):
                 print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
                       "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),

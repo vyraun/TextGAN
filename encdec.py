@@ -16,6 +16,13 @@ class EncoderDecoderModel(object):
         self.embedding = self.word_embedding_matrix()
         self.softmax_w, self.softmax_b = self.softmax_variables()
 
+        self.mle_lr = tf.get_variable("mle_lr", shape=[], initializer=tf.zeros_initializer,
+                                      trainable=False)
+        self.d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
+                                    trainable=False)
+        self.g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
+                                    trainable=False)
+
         if mle_mode:
             # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
             self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
@@ -55,16 +62,21 @@ class EncoderDecoderModel(object):
             gan_loss = self.gan_loss(d_out, 1)
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
             if training:
-                self.train_op = [self.train_mle(self.mle_cost), self.train_d(self.gan_cost)]
+                self.train_op = [self.train_mle(self.mle_cost), tf.no_op()] # need to enable_gan
+                self.gan_train_op = [self.train_op[0], self.train_d(self.gan_cost)]
             else:
                 self.train_op = [tf.no_op(), tf.no_op()]
         else:
             gan_loss = self.gan_loss(d_out, 0)
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
+            self.train_op = [tf.no_op(), tf.no_op()] # need to explicitly enable_gan
             if training:
-                self.train_op = [self.train_g(-self.gan_cost), self.train_d(self.gan_cost)]
-            else:
-                self.train_op = [tf.no_op(), tf.no_op()]
+                self.gan_train_op = [self.train_g(-self.gan_cost), self.train_d(self.gan_cost)]
+
+    def enable_gan(self):
+        '''Enable GAN training.'''
+        if self.training:
+            self.train_op = self.gan_train_op
 
     def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None,
                  return_states=False):
@@ -184,17 +196,14 @@ class EncoderDecoderModel(object):
 
     def train_mle(self, cost):
         '''Training op for MLE mode.'''
-        self.mle_lr = tf.Variable(0.0, trainable=False)
         return self._train(self.mle_lr, cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)')
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''
-        self.d_lr = tf.Variable(0.0, trainable=False)
         return self._train(self.d_lr, cost, '.*/Discriminator')
 
     def train_g(self, cost):
         '''Training op for GAN mode, generator.'''
-        self.g_lr = tf.Variable(0.0, trainable=False)
         # don't update embeddings, just update the generated distributions
         return self._train(self.g_lr, cost, '.*/Decoder')
 
