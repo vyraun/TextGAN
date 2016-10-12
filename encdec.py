@@ -41,15 +41,15 @@ class EncoderDecoderModel(object):
             self.latent = tf.placeholder(tf.float32, [config.batch_size,
                                                       config.num_layers * config.hidden_size],
                                          name='gan_random_input')
-        outputs = self.decoder(lembs, self.latent)
+        output, states = self.decoder(lembs, self.latent)
 
         if not mle_mode:
-            self.generated = tf.stop_gradient(self.output_words(outputs))
-        d_out = self.discriminator(outputs)
+            self.generated = tf.stop_gradient(self.output_words(output))
+        d_out = self.discriminator(states)
         if mle_mode:
             # shift left the input to get the targets
             targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
-            mle_loss = self.mle_loss(outputs, targets)
+            mle_loss = self.mle_loss(output, targets)
             self.nll = tf.reduce_sum(mle_loss) / config.batch_size
             self.mle_cost = self.nll
             gan_loss = self.gan_loss(d_out, 1)
@@ -66,11 +66,13 @@ class EncoderDecoderModel(object):
             else:
                 self.train_op = [tf.no_op(), tf.no_op()]
 
-    def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None):
+    def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None,
+                 return_states=False):
         '''Return a multi-layer RNN cell.'''
         return rnncell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
                                          for _ in xrange(self.config.num_layers)],
-                                    embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b)
+                                    embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b,
+                                    return_states=return_states)
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''
@@ -110,12 +112,17 @@ class EncoderDecoderModel(object):
             inputs = tf.zeros_like(inputs)
         with tf.variable_scope("Decoder"):
             if self.mle_mode:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent), inputs, dtype=tf.float32)
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, return_states=True), inputs,
+                                               dtype=tf.float32)
             else:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, self.embedding, self.softmax_w,
-                                                             self.softmax_b), inputs,
-                                               dtype=tf.float32)
-        return outputs # FIXME these are only the states of the topmost layer!
+                                                             self.softmax_b, return_states=True),
+                                               inputs, dtype=tf.float32)
+            output = tf.slice(outputs, [0, 0, 0], [-1, -1, self.config.hidden_size])
+            states = tf.slice(outputs, [0, 0, self.config.hidden_size], [-1, -1, -1])
+            # for GRU, we skipped the last layer states because they're the outputs
+            states = tf.concat(2, [states, output])
+        return output, states
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''

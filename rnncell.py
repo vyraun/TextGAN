@@ -43,7 +43,8 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
 class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
     """RNN cell composed sequentially of multiple simple cells."""
 
-    def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None):
+    def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None, return_states=False,
+                 outputs_are_states=True):
         """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
            None, the output of the previous timestep is used for the current time step using the
            softmax variables.
@@ -57,6 +58,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.embedding = embedding
         self.softmax_w = softmax_w
         self.softmax_b = softmax_b
+        self.return_states = return_states
+        self.outputs_are_states = outputs_are_states # should be true for GRUs
         if embedding is not None:
             self.word_emb_size = embedding.get_shape()[1]
         else:
@@ -71,7 +74,14 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
 
     @property
     def output_size(self):
-        return self.cells[-1].output_size
+        size = self.cells[-1].output_size
+        if self.outputs_are_states:
+            skip = 1
+        else:
+            skip = 0
+        if self.return_states:
+            size += sum(cell.state_size for cell in self.cells[:-skip])
+        return size
 
     def __call__(self, inputs, state, scope=None):
         """Run this multi-layer cell on inputs, starting from state."""
@@ -99,6 +109,14 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 sm = tf.nn.softmax(logits, name='Softmax')
                 new_states.append(tf.matmul(sm, self.embedding))
                 new_states.append(tf.ones([sm.get_shape()[0], 1]))
-        new_states = tuple(new_states)
-        return cur_inp, new_states
+        if self.return_states:
+            if self.embedding is not None:
+                skip = 2
+            else:
+                skip = 0
+            if self.outputs_are_states: # skip the last layer states, since they're outputs
+                skip += 1
+            return tf.concat(1, [cur_inp] + new_states[:-skip]), tuple(new_states)
+        else:
+            return cur_inp, tuple(new_states)
 
