@@ -81,10 +81,13 @@ class EncoderDecoderModel(object):
     def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None,
                  return_states=False):
         '''Return a multi-layer RNN cell.'''
+        softmax_top_k = self.config.generator_top_k
+        if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
+            softmax_top_k = -1
         return rnncell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
                                          for _ in xrange(self.config.num_layers)],
                                     embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b,
-                                    return_states=return_states)
+                                    return_states=return_states, softmax_top_k=softmax_top_k)
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''

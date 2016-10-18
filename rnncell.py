@@ -44,7 +44,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
     """RNN cell composed sequentially of multiple simple cells."""
 
     def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None, return_states=False,
-                 outputs_are_states=True):
+                 outputs_are_states=True, softmax_top_k=-1):
         """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
            None, the output of the previous timestep is used for the current time step using the
            softmax variables.
@@ -60,6 +60,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.softmax_b = softmax_b
         self.return_states = return_states
         self.outputs_are_states = outputs_are_states # should be true for GRUs
+        self.softmax_top_k = softmax_top_k
         if embedding is not None:
             self.word_emb_size = embedding.get_shape()[1]
         else:
@@ -83,6 +84,17 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             size += sum(cell.state_size for cell in self.cells[:-skip])
         return size
 
+    def expected_embedding(self, logits):
+        sm = tf.nn.softmax(logits, name='Softmax')
+        if self.softmax_top_k > 0:
+            values, indices = tf.nn.top_k(sm, k=self.softmax_top_k, sorted=False)
+            values /= tf.reduce_sum(values, -1, keep_dims=True) # values is now a valid distribution
+            embeddings = tf.nn.embedding_lookup(self.embedding, indices, name='rnn_embedding')
+            embeddings = embeddings * tf.expand_dims(values, -1) # rescaled embeddings by probs
+            return tf.reduce_sum(embeddings, -2) # expected embedding
+        else:
+            return tf.matmul(sm, self.embedding) # expectation over entire distribution
+
     def __call__(self, inputs, state, scope=None):
         """Run this multi-layer cell on inputs, starting from state."""
         with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
@@ -105,10 +117,9 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             if self.embedding is not None:
                 logits = tf.nn.bias_add(tf.matmul(cur_inp, tf.transpose(self.softmax_w),
                                                   name='Softmax_transform'),
-                                        self.softmax_b) # TODO do a sparse approximation?
-                sm = tf.nn.softmax(logits, name='Softmax')
-                new_states.append(tf.matmul(sm, self.embedding))
-                new_states.append(tf.ones([sm.get_shape()[0], 1]))
+                                        self.softmax_b)
+                new_states.append(self.expected_embedding(logits))
+                new_states.append(tf.ones([inputs.get_shape()[0], 1])) # we have valid prev input
         if self.return_states:
             if self.embedding is not None:
                 skip = 2
