@@ -11,8 +11,8 @@ input_dir = 'gutenberg' # raw text dir
 
 vocab_size = 100000
 
-val_split = 0.001
-test_split = 0.001
+val_split = 0.0003 # gutenberg is huge
+test_split = 0.0005
 train_split = 1.0 - val_split - test_split
 
 
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     fnames = sorted(glob.glob(pjoin(input_dir, '*.txt')))
     for i, fname in enumerate(fnames):
         print '(%d/%d) %s' % (i, len(fnames), fname)
-        with codecs.open(fname, 'r', 'utf-8') as f:
+        with codecs.open(fname, 'r', 'latin-1') as f:
             paragraph = []
             for l in f:
                 line = l.strip()
