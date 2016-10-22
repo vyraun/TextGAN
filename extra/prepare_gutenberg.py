@@ -70,7 +70,7 @@ def summarize(output, vocab):
     print '   Val:  ', val_N
     print '   Test: ', test_N
     print
-    return train_N, val_N, test_N
+    return train_N, val_N, test_N, top_words
 
 
 if __name__ == '__main__':
@@ -92,8 +92,8 @@ if __name__ == '__main__':
             process(output, vocab, paragraph)
         if (i+1) % 50 == 0:
             summarize(output, vocab)
-    train_N, val_N, test_N = summarize(output, vocab)
+    train_N, val_N, test_N, top_words = summarize(output, vocab)
 
-    create_file('train.txt', output[:train_N], vocab)
-    create_file('test.txt', output[train_N:train_N+test_N], vocab)
-    create_file('valid.txt', output[train_N+test_N:], vocab)
+    create_file('train.txt', output[:train_N], top_words)
+    create_file('test.txt', output[train_N:train_N+test_N], top_words)
+    create_file('valid.txt', output[train_N+test_N:], top_words)

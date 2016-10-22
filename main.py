@@ -65,8 +65,8 @@ def save_model(session, saver, config, perp, cur_iters):
     print "Saved to", save_file
 
 
-def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver, steps, max_steps,
-              gen_samples=0, use_gan=True):
+def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab, saver, steps,
+              max_steps, gen_samples=0, use_gan=True):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -102,9 +102,9 @@ def run_epoch(session, mle_model, gan_model, batch_loader, config, vocab, saver,
             avg_nll = shortterm_nlls / shortterm_iters
             avg_mle_cost = shortterm_mle_costs / shortterm_iters
             avg_gan_cost = shortterm_gan_costs / shortterm_iters
-            print("%d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
+            print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
                   "speed: %.0f wps" %
-                  (step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost,
+                  (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost,
                    shortterm_iters * config.batch_size / (time.time() - start_time)))
 
             shortterm_nlls = 0.0
@@ -183,13 +183,13 @@ def main(_):
                 print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
                       "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
                                            session.run(gan_model.d_lr), session.run(gan_model.g_lr))
-                perplexity, steps = run_epoch(session, mle_model, gan_model, reader.training(),
+                perplexity, steps = run_epoch(i, session, mle_model, gan_model, reader.training(),
                                               config, vocab, saver, steps, config.max_steps,
                                               use_gan=use_gan)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
-                    perplexity, _ = run_epoch(session, eval_mle_model, eval_gan_model,
+                    perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
                                               reader.validation(), config, vocab, None, 0, -1,
                                               gen_samples=config.gen_samples, use_gan=use_gan)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
@@ -202,7 +202,7 @@ def main(_):
                     break
         else:
             print '\nTesting'
-            perplexity, _ = run_epoch(session, test_mle_model, test_gan_model, reader.testing(),
+            perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, reader.testing(),
                                       config, vocab, None, 0, config.max_steps,
                                       gen_samples=config.gan_samples)
             print "Test Perplexity: %.3f" % perplexity
