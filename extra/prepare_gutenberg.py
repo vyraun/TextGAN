@@ -17,7 +17,7 @@ test_split = 0.0005
 train_split = 1.0 - val_split - test_split
 
 
-fix_re = re.compile(r"[^a-z0-9'.]+")
+fix_re = re.compile(r"[^a-z0-9]+")
 num_re = re.compile(r'[0-9]+')
 
 
@@ -39,7 +39,7 @@ def process(output, vocab, lines):
         words = [w for w in words if w]
         for word in words:
             vocab[word] += 1
-        if len(words) > 3:
+        if len(words) > 3 and len(words) < 50: # ignore very short and long sentences
             output.append(words)
 
 
