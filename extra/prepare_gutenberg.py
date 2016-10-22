@@ -2,6 +2,7 @@ import codecs
 import collections
 import glob
 from os.path import join as pjoin
+import random
 import re
 import unicodedata
 
@@ -94,6 +95,7 @@ if __name__ == '__main__':
             summarize(output, vocab)
     train_N, val_N, test_N, top_words = summarize(output, vocab)
 
+    random.shuffle(output)
     create_file('train.txt', output[:train_N], top_words)
     create_file('test.txt', output[train_N:train_N+test_N], top_words)
     create_file('valid.txt', output[train_N+test_N:], top_words)
