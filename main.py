@@ -204,7 +204,7 @@ def main(_):
             print '\nTesting'
             perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, reader.testing(),
                                       config, vocab, None, 0, config.max_steps,
-                                      gen_samples=config.gan_samples)
+                                      gen_samples=config.gen_samples)
             print "Test Perplexity: %.3f" % perplexity
 
 
