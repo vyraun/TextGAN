@@ -26,23 +26,21 @@ def call_mle_session(session, model, batch, use_gan):
     return session.run(ops, f_dict)[:-1]
 
 
-def get_latent_representation(latent_dims):
+def get_random_sample(random_dims):
     '''Generate a random latent representation to generate text from.'''
-    return np.clip(np.random.normal(scale=0.5, size=latent_dims), -1.0, 1.0)
+    return np.random.normal(size=random_dims)
 
 
-def call_gan_session(session, model, latent_dims):
+def call_gan_session(session, model, random_dims):
     '''Use the session to train the generator of the GAN with fake samples.'''
-    # XXX z from normal distribution may not be a good assumption, since encoded samples may not
-    #     come from that. encourage encoder outputs to live in this prior?
-    f_dict = {model.latent: get_latent_representation(latent_dims)}
+    f_dict = {model.rand_input: get_random_sample(random_dims)}
     # model.train_op will be tf.no_op() for a non-training model
     return session.run([model.gan_cost, model.train_op], f_dict)[:-1]
 
 
-def generate_sentences(session, model, latent_dims, vocab):
+def generate_sentences(session, model, random_dims, vocab):
     '''Generate novel sentences using the generator.'''
-    f_dict = {model.latent: get_latent_representation(latent_dims)}
+    f_dict = {model.rand_input: get_random_sample(random_dims)}
     output = session.run(model.generated, f_dict)
     print '\nVisualizing new batch!'
     for i, sent in enumerate(output):

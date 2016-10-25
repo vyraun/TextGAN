@@ -16,13 +16,6 @@ class EncoderDecoderModel(object):
         self.embedding = self.word_embedding_matrix()
         self.softmax_w, self.softmax_b = self.softmax_variables()
 
-        self.mle_lr = tf.get_variable("mle_lr", shape=[], initializer=tf.zeros_initializer,
-                                      trainable=False)
-        self.d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
-                                    trainable=False)
-        self.g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
-                                    trainable=False)
-
         if mle_mode:
             # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
             self.ldata = tf.placeholder(tf.int32, [config.batch_size, None], name='ldata')
@@ -45,9 +38,9 @@ class EncoderDecoderModel(object):
             # so the rest can be zeros
             lembs = tf.concat(1, [lembs, tf.zeros([config.batch_size, config.gen_sent_length - 1,
                                                    config.word_emb_size])])
-            self.latent = tf.placeholder(tf.float32, [config.batch_size,
-                                                      config.num_layers * config.hidden_size],
-                                         name='gan_random_input')
+            self.rand_input = tf.placeholder(tf.float32, [config.batch_size, config.hidden_size],
+                                             name='gan_random_input')
+            self.latent = self.generate_latent(self.rand_input)
         output, states = self.decoder(lembs, self.latent)
 
         if not mle_mode:
@@ -111,6 +104,15 @@ class EncoderDecoderModel(object):
         with tf.device('/cpu:0') and tf.variable_scope("Embeddings"):
             embeds = tf.nn.embedding_lookup(self.embedding, inputs, name='word_embedding_lookup')
         return embeds
+
+    def generate_latent(self, rand_input):
+        '''Transform a sample from the normal distribution to a sample from the latent
+           representation distribution.'''
+        with tf.variable_scope("Transform_Latent"):
+            rand_input = utils.highway(rand_input, layer_size=2)
+            latent = utils.linear(rand_input, self.config.num_layers * self.config.hidden_size,
+                                  True)
+        return tf.nn.tanh(latent)
 
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation.'''
@@ -199,16 +201,22 @@ class EncoderDecoderModel(object):
 
     def train_mle(self, cost):
         '''Training op for MLE mode.'''
+        self.mle_lr = tf.get_variable("mle_lr", shape=[], initializer=tf.zeros_initializer,
+                                      trainable=False)
         return self._train(self.mle_lr, cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)')
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''
+        self.d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
+                                    trainable=False)
         return self._train(self.d_lr, cost, '.*/Discriminator')
 
     def train_g(self, cost):
         '''Training op for GAN mode, generator.'''
+        self.g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
+                                    trainable=False)
         # don't update embeddings, just update the generated distributions
-        return self._train(self.g_lr, cost, '.*/Decoder')
+        return self._train(self.g_lr, cost, '.*/(Transform_Latent|Decoder)')
 
     def assign_mle_lr(self, session, lr_value):
         '''Change the MLE learning rate'''
