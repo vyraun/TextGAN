@@ -79,8 +79,7 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
     for step, batch in enumerate(batch_loader):
         if use_gan:
             nll, mle_cost, d_cost = call_mle_session(session, mle_model, batch, use_gan=True)
-            g_cost = call_gan_session(session, gan_model, [config.batch_size,
-                                                           config.num_layers * config.hidden_size])
+            g_cost = call_gan_session(session, gan_model, [config.batch_size, config.hidden_size])
             gan_cost = (g_cost + d_cost) / 2
         else:
             nll, mle_cost = call_mle_session(session, mle_model, batch, use_gan=False)
@@ -139,18 +138,15 @@ def main(_):
     config_proto = tf.ConfigProto()
     config_proto.gpu_options.allow_growth = True
     with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
-        if config.training:
-            with tf.variable_scope("Model", reuse=None):
-                mle_model = EncoderDecoderModel(config, vocab, True, True)
-            with tf.variable_scope("Model", reuse=True):
-                gan_model = EncoderDecoderModel(config, vocab, True, False)
-                eval_mle_model = EncoderDecoderModel(config, vocab, False, True)
-                eval_gan_model = EncoderDecoderModel(config, vocab, False, False)
-        else:
-            with tf.variable_scope("Model", reuse=None):
-                test_mle_model = EncoderDecoderModel(config, vocab, False, True)
-            with tf.variable_scope("Model", reuse=True):
-                test_gan_model = EncoderDecoderModel(config, vocab, False, False)
+        with tf.variable_scope("Model"):
+            if config.training:
+                mle_model = EncoderDecoderModel(config, vocab, True, True, None, None)
+                gan_model = EncoderDecoderModel(config, vocab, True, False, True, None)
+                eval_mle_model = EncoderDecoderModel(config, vocab, False, True, True, None)
+                eval_gan_model = EncoderDecoderModel(config, vocab, False, False, True, True)
+            else:
+                test_mle_model = EncoderDecoderModel(config, vocab, False, True, None, None)
+                test_gan_model = EncoderDecoderModel(config, vocab, False, False, True, None)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file

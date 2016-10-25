@@ -7,11 +7,14 @@ import utils
 class EncoderDecoderModel(object):
     '''The encoder-decoder adversarial model.'''
 
-    def __init__(self, config, vocab, training, mle_mode):
+    def __init__(self, config, vocab, training, mle_mode, mle_reuse, gan_reuse):
         self.config = config
         self.vocab = vocab
         self.training = training
         self.mle_mode = mle_mode
+        self.mle_reuse = mle_reuse
+        self.gan_reuse = gan_reuse
+        self.reuse = mle_reuse or gan_reuse # for common variables
 
         self.embedding = self.word_embedding_matrix()
         self.softmax_w, self.softmax_b = self.softmax_variables()
@@ -84,7 +87,7 @@ class EncoderDecoderModel(object):
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''
-        with tf.device('/cpu:0') and tf.variable_scope("Embeddings"):
+        with tf.device('/cpu:0') and tf.variable_scope("Embeddings", reuse=self.reuse):
             embedding = tf.get_variable('word_embedding', [len(self.vocab.vocab),
                                                            self.config.word_emb_size],
                                         initializer=tf.random_uniform_initializer(-1.0, 1.0))
@@ -92,7 +95,7 @@ class EncoderDecoderModel(object):
 
     def softmax_variables(self):
         '''Define the softmax weight and bias variables.'''
-        with tf.variable_scope("MLE_Softmax"):
+        with tf.variable_scope("MLE_Softmax", reuse=self.reuse):
             softmax_w = tf.get_variable("W", [len(self.vocab.vocab), self.config.hidden_size],
                                         initializer=tf.contrib.layers.xavier_initializer())
             softmax_b = tf.get_variable("b", [len(self.vocab.vocab)],
@@ -101,14 +104,14 @@ class EncoderDecoderModel(object):
 
     def word_embeddings(self, inputs):
         '''Look up word embeddings for the input indices.'''
-        with tf.device('/cpu:0') and tf.variable_scope("Embeddings"):
+        with tf.device('/cpu:0'):
             embeds = tf.nn.embedding_lookup(self.embedding, inputs, name='word_embedding_lookup')
         return embeds
 
     def generate_latent(self, rand_input):
         '''Transform a sample from the normal distribution to a sample from the latent
            representation distribution.'''
-        with tf.variable_scope("Transform_Latent"):
+        with tf.variable_scope("Transform_Latent", reuse=self.gan_reuse):
             rand_input = utils.highway(rand_input, layer_size=2)
             latent = utils.linear(rand_input, self.config.num_layers * self.config.hidden_size,
                                   True)
@@ -116,7 +119,7 @@ class EncoderDecoderModel(object):
 
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation.'''
-        with tf.variable_scope("Encoder"):
+        with tf.variable_scope("Encoder", reuse=self.mle_reuse):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(), inputs, dtype=tf.float32)
             latent = utils.highway(state)
         return latent
@@ -127,7 +130,7 @@ class EncoderDecoderModel(object):
             latent = None
         if self.config.force_noinputs:
             inputs = tf.zeros_like(inputs)
-        with tf.variable_scope("Decoder"):
+        with tf.variable_scope("Decoder", reuse=self.reuse):
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, return_states=True), inputs,
                                                dtype=tf.float32)
@@ -172,7 +175,7 @@ class EncoderDecoderModel(object):
 
     def discriminator(self, states):
         '''Discriminator that operates on the final states of the sentences.'''
-        with tf.variable_scope("Discriminator"):
+        with tf.variable_scope("Discriminator", reuse=self.reuse):
             if self.mle_mode:
                 indices = self.lengths - 2
             else:
@@ -201,20 +204,23 @@ class EncoderDecoderModel(object):
 
     def train_mle(self, cost):
         '''Training op for MLE mode.'''
-        self.mle_lr = tf.get_variable("mle_lr", shape=[], initializer=tf.zeros_initializer,
-                                      trainable=False)
+        with tf.variable_scope("LR", reuse=self.mle_reuse):
+            self.mle_lr = tf.get_variable("mle_lr", shape=[], initializer=tf.zeros_initializer,
+                                          trainable=False)
         return self._train(self.mle_lr, cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)')
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''
-        self.d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
-                                    trainable=False)
+        with tf.variable_scope("LR", reuse=self.reuse):
+            self.d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
+                                        trainable=False)
         return self._train(self.d_lr, cost, '.*/Discriminator')
 
     def train_g(self, cost):
         '''Training op for GAN mode, generator.'''
-        self.g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
-                                    trainable=False)
+        with tf.variable_scope("LR", reuse=self.gan_reuse):
+            self.g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
+                                        trainable=False)
         # don't update embeddings, just update the generated distributions
         return self._train(self.g_lr, cost, '.*/(Transform_Latent|Decoder)')
 
