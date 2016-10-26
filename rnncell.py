@@ -85,20 +85,23 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         return size
 
     def expected_embedding(self, logits):
-        sm = tf.nn.softmax(logits, name='Softmax')
-        if self.softmax_top_k > 0:
-            values, indices = tf.nn.top_k(sm, k=self.softmax_top_k, sorted=False)
-            values /= tf.reduce_sum(values, -1, keep_dims=True) # values is now a valid distribution
-            embeddings = tf.nn.embedding_lookup(self.embedding, indices, name='rnn_embedding')
-            embeddings = embeddings * tf.expand_dims(values, -1) # rescaled embeddings by probs
-            return tf.reduce_sum(embeddings, -2) # expected embedding
+        if self.softmax_top_k == 1:
+            return tf.nn.embedding_lookup(self.embedding, tf.argmax(logits, 1),
+                                          name='rnn_embedding_k1')
         else:
-            return tf.matmul(sm, self.embedding) # expectation over entire distribution
+            sm = tf.nn.softmax(logits, name='Softmax')
+            if self.softmax_top_k > 0:
+                values, indices = tf.nn.top_k(sm, k=self.softmax_top_k, sorted=False)
+                values /= tf.reduce_sum(values, -1, keep_dims=True) # values is now a valid distrib
+                embeddings = tf.nn.embedding_lookup(self.embedding, indices, name='rnn_embedding')
+                embeddings = embeddings * tf.expand_dims(values, -1) # rescaled embeddings by probs
+                return tf.reduce_sum(embeddings, -2) # expected embedding
+            else:
+                return tf.matmul(sm, self.embedding) # expectation over entire distribution
 
     def __call__(self, inputs, state, scope=None):
         """Run this multi-layer cell on inputs, starting from state."""
         with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
-            cur_state_pos = 0
             if self.embedding is not None:
                 cur_inp = tf.select(tf.greater(state[-1][:,0], 0.5), state[-2], inputs)
             else:
