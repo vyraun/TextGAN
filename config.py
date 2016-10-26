@@ -17,7 +17,7 @@ flags.DEFINE_integer("num_layers",        2,       "Number of RNN layers")
 flags.DEFINE_integer("hidden_size",       192,     "RNN hidden state size")
 flags.DEFINE_float  ("word_dropout",      0.33,    "Word dropout probability")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
-flags.DEFINE_integer("generator_top_k",   50,      "Number of words to consider from previous " \
+flags.DEFINE_integer("generator_top_k",   -1,      "Number of words to consider from previous " \
                                                    "timestep during generation (-1 for all)")
 flags.DEFINE_integer("gen_sent_length",   128,     "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
