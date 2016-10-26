@@ -60,7 +60,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.softmax_b = softmax_b
         self.return_states = return_states
         self.outputs_are_states = outputs_are_states # should be true for GRUs
-        self.softmax_top_k = softmax_top_k
+        self.softmax_top_k = softmax_top_k # TODO handle special case of 1 to be faster if possible
         if embedding is not None:
             self.word_emb_size = embedding.get_shape()[1]
         else:
@@ -103,7 +103,6 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 cur_inp = tf.select(tf.greater(state[-1][:,0], 0.5), state[-2], inputs)
             else:
                 cur_inp = inputs
-            cur_inp = inputs
             new_states = []
             for i, cell in enumerate(self.cells):
                 with tf.variable_scope("Layer%d" % i):
