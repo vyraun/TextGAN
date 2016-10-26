@@ -23,7 +23,7 @@ flags.DEFINE_integer("update_g_every",    1,       "Update generator every these
 flags.DEFINE_integer("gen_sent_length",   128,     "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
-flags.DEFINE_integer("gan_wait_epochs",   1,       "The number of epochs to wait before " \
+flags.DEFINE_integer("gan_wait_epochs",   0,       "The number of epochs to wait before " \
                                                    "optimizing the GAN objectives")
 flags.DEFINE_string ("optimizer",         "adam",  "Optimizer to use (sgd, adam, adagrad, " \
                                                    "adadelta)")
