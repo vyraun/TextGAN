@@ -19,6 +19,7 @@ flags.DEFINE_float  ("word_dropout",      0.33,    "Word dropout probability")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   -1,      "Number of words to consider from previous " \
                                                    "timestep during generation (-1 for all)")
+flags.DEFINE_integer("update_g_every",    1,       "Update generator every these many steps")
 flags.DEFINE_integer("gen_sent_length",   128,     "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
@@ -35,6 +36,8 @@ flags.DEFINE_integer("max_steps",         9999999, "Maximum number of steps to r
 
 flags.DEFINE_integer("gen_samples",       1,       "Number of demo samples batches to generate " \
                                                    "per epoch")
+flags.DEFINE_integer("gen_every",         10000,   "Generate samples every these many training " \
+                                                   "steps (0 to disable, -1 for each epoch)")
 flags.DEFINE_integer("print_every",       50,      "Print every these many steps")
 flags.DEFINE_integer("save_every",        -1,      "Save every these many steps (0 to disable, " \
                                                    "-1 for each epoch)")

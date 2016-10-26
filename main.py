@@ -19,11 +19,12 @@ def call_mle_session(session, model, batch, use_gan):
               model.rdata_dropped: batch[3],
               model.lengths: batch[4]}
     ops = [model.nll, model.mle_cost]
+    train_ops = [model.mle_train_op] # this will be tf.no_op() for a non-training model
     if use_gan:
         ops.append(model.gan_cost)
-    # model.train_op will be tf.no_op() for a non-training model
-    ops.append(model.train_op)
-    return session.run(ops, f_dict)[:-1]
+        train_ops.append(model.d_train_op) # tf.no_op() for non-training model
+    ops.extend(train_ops)
+    return session.run(ops, f_dict)[:-len(train_ops)]
 
 
 def get_random_sample(random_dims):
@@ -31,11 +32,16 @@ def get_random_sample(random_dims):
     return np.random.normal(size=random_dims)
 
 
-def call_gan_session(session, model, random_dims):
+def call_gan_session(session, model, random_dims, generator=False):
     '''Use the session to train the generator of the GAN with fake samples.'''
     f_dict = {model.rand_input: get_random_sample(random_dims)}
-    # model.train_op will be tf.no_op() for a non-training model
-    return session.run([model.gan_cost, model.train_op], f_dict)[:-1]
+    ops = [model.gan_cost]
+    # train_ops will be tf.no_op() for a non-training model
+    if generator:
+        ops.append(model.g_train_op)
+    else:
+        ops.append(model.d_train_op)
+    return session.run(ops, f_dict)[:-1]
 
 
 def generate_sentences(session, model, random_dims, vocab):
@@ -64,7 +70,7 @@ def save_model(session, saver, config, perp, cur_iters):
 
 
 def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab, saver, steps,
-              max_steps, gen_samples=0, use_gan=True):
+              max_steps, gen_every=0, use_gan=True):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -80,8 +86,12 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
     for step, batch in enumerate(batch_loader):
         if use_gan:
             nll, mle_cost, d_cost = call_mle_session(session, mle_model, batch, use_gan=True)
-            g_cost = call_gan_session(session, gan_model, [config.batch_size, config.hidden_size])
-            gan_cost = (g_cost + d_cost) / 2
+            r_cost = call_gan_session(session, gan_model, [config.batch_size, config.hidden_size])
+            gan_cost = (d_cost + r_cost) / 2
+            if (step + 1) % config.update_g_every == 0:
+                g_cost = call_gan_session(session, gan_model,
+                                          [config.batch_size, config.hidden_size], generator=True)
+                gan_cost = (d_cost + r_cost + g_cost) / 3
         else:
             nll, mle_cost = call_mle_session(session, mle_model, batch, use_gan=False)
             gan_cost = 0.0
@@ -114,6 +124,10 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
             shortterm_steps = 0
             start_time = time.time()
 
+        if use_gan and gen_every > 0 and (step + 1) % gen_every == 0:
+            for _ in xrange(config.gen_samples):
+                generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
+                                   vocab)
         cur_iters = steps + step
         if saver is not None and cur_iters and config.save_every > 0 and \
                 cur_iters % config.save_every == 0:
@@ -122,10 +136,10 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
-    if use_gan:
-        for _ in xrange(gen_samples):
-            generate_sentences(session, gan_model, [config.batch_size,
-                                                    config.num_layers * config.hidden_size], vocab)
+    if use_gan and gen_every < 0:
+        for _ in xrange(config.gen_samples):
+            generate_sentences(session, gan_model, [config.batch_size, config.hidden_size], vocab)
+
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
     if saver is not None and config.save_every < 0:
@@ -175,21 +189,19 @@ def main(_):
             for i in xrange(config.max_epoch):
                 if i == config.gan_wait_epochs:
                     print 'Enabling GAN training!'
-                    mle_model.enable_gan()
-                    gan_model.enable_gan()
                     use_gan = True
                 print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
                       "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
                                            session.run(gan_model.d_lr), session.run(gan_model.g_lr))
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, reader.training(),
                                               config, vocab, saver, steps, config.max_steps,
-                                              use_gan=use_gan)
+                                              gen_every=config.gen_every, use_gan=use_gan)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
                                               reader.validation(), config, vocab, None, 0, -1,
-                                              gen_samples=config.gen_samples, use_gan=use_gan)
+                                              gen_every=-1, use_gan=use_gan)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                     valid_perps.append(perplexity)
                 else:
@@ -201,8 +213,7 @@ def main(_):
         else:
             print '\nTesting'
             perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, reader.testing(),
-                                      config, vocab, None, 0, config.max_steps,
-                                      gen_samples=config.gen_samples)
+                                      config, vocab, None, 0, config.max_steps, gen_every=-1)
             print "Test Perplexity: %.3f" % perplexity
 
 

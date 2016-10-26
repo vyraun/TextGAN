@@ -58,21 +58,20 @@ class EncoderDecoderModel(object):
             gan_loss = self.gan_loss(d_out, 1)
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
             if training:
-                self.train_op = [self.train_mle(self.mle_cost), tf.no_op()] # need to enable_gan
-                self.gan_train_op = [self.train_op[0], self.train_d(self.gan_cost)]
+                self.mle_train_op = self.train_mle(self.mle_cost)
+                self.d_train_op = self.train_d(self.gan_cost)
             else:
-                self.train_op = [tf.no_op(), tf.no_op()]
+                self.mle_train_op = tf.no_op()
+                self.d_train_op = tf.no_op()
         else:
             gan_loss = self.gan_loss(d_out, 0)
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
-            self.train_op = [tf.no_op(), tf.no_op()] # need to explicitly enable_gan
             if training:
-                self.gan_train_op = [self.train_g(-self.gan_cost), self.train_d(self.gan_cost)]
-
-    def enable_gan(self):
-        '''Enable GAN training.'''
-        if self.training:
-            self.train_op = self.gan_train_op
+                self.d_train_op = self.train_d(self.gan_cost)
+                self.g_train_op = self.train_g(-self.gan_cost)
+            else:
+                self.d_train_op = tf.no_op()
+                self.g_train_op = tf.no_op()
 
     def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None,
                  return_states=False):
