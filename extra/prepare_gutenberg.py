@@ -12,6 +12,9 @@ input_dir = 'gutenberg' # raw text dir
 
 vocab_size = 100000
 
+MIN_LEN = 4
+MAX_LEN = 49 # 12 for data_short
+
 val_split = 0.0003 # gutenberg is huge
 test_split = 0.0005
 train_split = 1.0 - val_split - test_split
@@ -39,7 +42,7 @@ def process(output, vocab, lines):
         words = [w for w in words if w]
         for word in words:
             vocab[word] += 1
-        if len(words) > 3 and len(words) < 50: # ignore very short and long sentences
+        if len(words) >= MIN_LEN and len(words) <= MAX_LEN: # ignore very short and long sentences
             output.append(words)
 
 
