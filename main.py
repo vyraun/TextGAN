@@ -75,6 +75,7 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
     shortterm_mle_costs = 0.0
     shortterm_gan_costs = 0.0
     shortterm_iters = 0
+    shortterm_steps = 0
 
     for step, batch in enumerate(batch_loader):
         if use_gan:
@@ -94,20 +95,23 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
         # batch[1] is the right aligned batch, without <eos>. predictions also have one token less.
         iters += batch[1].shape[1]
         shortterm_iters += batch[1].shape[1]
+        shortterm_steps += 1
 
         if step % config.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
-            avg_mle_cost = shortterm_mle_costs / shortterm_iters
-            avg_gan_cost = shortterm_gan_costs / shortterm_iters
+            avg_mle_cost = shortterm_mle_costs / shortterm_steps
+            avg_gan_cost = shortterm_gan_costs / shortterm_steps
+            d_acc = np.exp(-avg_gan_cost)
             print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
-                  "speed: %.0f wps" %
-                  (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost,
+                  "d_acc: %.4f  speed: %.0f wps" %
+                  (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
                    shortterm_iters * config.batch_size / (time.time() - start_time)))
 
             shortterm_nlls = 0.0
             shortterm_mle_costs = 0.0
             shortterm_gan_costs = 0.0
             shortterm_iters = 0
+            shortterm_steps = 0
             start_time = time.time()
 
         cur_iters = steps + step
