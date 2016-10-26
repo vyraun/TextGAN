@@ -85,6 +85,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         return size
 
     def expected_embedding(self, logits):
+        """Use the current logits to return the embedding for the next timestep input."""
         if self.softmax_top_k == 1:
             return tf.nn.embedding_lookup(self.embedding, tf.argmax(logits, 1),
                                           name='rnn_embedding_k1')
