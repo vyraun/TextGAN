@@ -12,13 +12,13 @@ import nltk
 
 input_dir = 'gutenberg' # raw text dir
 
-data_coverage = 0.965 # decide vocab based on how much of the data should be covered
+data_coverage = 0.97 # decide vocab based on how much of the data should be covered
 
 MIN_LEN = 4
 MAX_LEN = 49 # 12 for data_short
 
 val_split = 0.0004 # gutenberg is huge
-test_split = 0.0007
+test_split = 0.0006
 train_split = 1.0 - val_split - test_split
 
 
@@ -97,11 +97,12 @@ if __name__ == '__main__':
         if (i+1) % 50 == 0:
             summarize(output, vocab)
     train_N, val_N, test_N = summarize(output, vocab)
+    top_words = vocab.most_common()
+    count = 0
     for vocab_size in xrange(vocab.B()):
-        top_words = vocab.most_common(vocab_size)
-        count = sum(c for w, c in top_words)
+        count += top_words[vocab_size][1]
         if count / vocab.N() >= data_coverage:
-            top_words = set(w for w, c in top_words)
+            top_words = set(w for w,c in vocab.most_common(vocab_size+1))
             break
     print 'Final vocab size:', len(top_words)
 
