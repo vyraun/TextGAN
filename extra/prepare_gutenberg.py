@@ -1,3 +1,5 @@
+from __future__ import division
+
 import codecs
 import collections
 import glob
@@ -10,13 +12,13 @@ import nltk
 
 input_dir = 'gutenberg' # raw text dir
 
-vocab_size = 100000
+data_coverage = 0.965 # decide vocab based on how much of the data should be covered
 
 MIN_LEN = 4
 MAX_LEN = 49 # 12 for data_short
 
-val_split = 0.0003 # gutenberg is huge
-test_split = 0.0005
+val_split = 0.0004 # gutenberg is huge
+test_split = 0.0007
 train_split = 1.0 - val_split - test_split
 
 
@@ -62,8 +64,6 @@ def summarize(output, vocab):
     print
     print 'Size of corpus:', vocab.N()
     print 'Total vocab size:', vocab.B()
-    top_words = vocab.most_common(vocab_size)
-    top_words = set(w for w, c in top_words)
 
     N = len(output)
     test_N = int(test_split * N)
@@ -74,7 +74,7 @@ def summarize(output, vocab):
     print '   Val:  ', val_N
     print '   Test: ', test_N
     print
-    return train_N, val_N, test_N, top_words
+    return train_N, val_N, test_N
 
 
 if __name__ == '__main__':
@@ -96,7 +96,14 @@ if __name__ == '__main__':
             process(output, vocab, paragraph)
         if (i+1) % 50 == 0:
             summarize(output, vocab)
-    train_N, val_N, test_N, top_words = summarize(output, vocab)
+    train_N, val_N, test_N = summarize(output, vocab)
+    for vocab_size in xrange(vocab.B()):
+        top_words = vocab.most_common(vocab_size)
+        count = sum(c for w, c in top_words)
+        if count / vocab.N() >= data_coverage:
+            top_words = set(w for w, c in top_words)
+            break
+    print 'Final vocab size:', len(top_words)
 
     random.shuffle(output)
     create_file('train.txt', output[:train_N], top_words)
