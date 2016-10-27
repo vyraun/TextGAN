@@ -2,10 +2,12 @@ from __future__ import division
 
 import codecs
 import collections
+import cPickle as pickle
 import glob
 from os.path import join as pjoin
 import random
 import re
+import sys
 import unicodedata
 
 import nltk
@@ -78,24 +80,33 @@ def summarize(output, vocab):
 
 
 if __name__ == '__main__':
-    output = []
-    vocab = nltk.FreqDist()
-    print 'Reading...'
-    fnames = sorted(glob.glob(pjoin(input_dir, '*.txt')))
-    for i, fname in enumerate(fnames):
-        print '(%d/%d) %s' % (i, len(fnames), fname)
-        with codecs.open(fname, 'r', 'latin-1') as f:
-            paragraph = []
-            for l in f:
-                line = l.strip()
-                if not line:
-                    process(output, vocab, paragraph)
-                    paragraph = []
-                else:
-                    paragraph.append(line)
-            process(output, vocab, paragraph)
-        if (i+1) % 50 == 0:
-            summarize(output, vocab)
+    if len(sys.argv) > 1:
+        print 'Loading from pickle', sys.argv[1]
+        with open(sys.argv[1], 'rb') as f:
+            output, vocab = pickle.load(f)
+    else:
+        output = []
+        vocab = nltk.FreqDist()
+        print 'Reading...'
+        fnames = sorted(glob.glob(pjoin(input_dir, '*.txt')))
+        for i, fname in enumerate(fnames):
+            print '(%d/%d) %s' % (i, len(fnames), fname)
+            with codecs.open(fname, 'r', 'latin-1') as f:
+                paragraph = []
+                for l in f:
+                    line = l.strip()
+                    if not line:
+                        process(output, vocab, paragraph)
+                        paragraph = []
+                    else:
+                        paragraph.append(line)
+                process(output, vocab, paragraph)
+            if (i+1) % 50 == 0:
+                summarize(output, vocab)
+        with open('dump.pk', 'wb') as f:
+            pickle.dump((output, vocab), f, -1)
+        print 'Pickle dumped to dump.pk'
+
     train_N, val_N, test_N = summarize(output, vocab)
     top_words = vocab.most_common()
     count = 0
