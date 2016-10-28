@@ -11,7 +11,7 @@ from encdec import EncoderDecoderModel
 from reader import Reader, Vocab
 
 
-def call_mle_session(session, model, batch, use_gan):
+def call_mle_session(session, model, batch, use_gan, get_latent=False):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.ldata: batch[0],
               model.rdata: batch[1],
@@ -23,6 +23,8 @@ def call_mle_session(session, model, batch, use_gan):
     if use_gan:
         ops.append(model.gan_cost)
         train_ops.append(model.d_train_op) # tf.no_op() for non-training model
+    if get_latent:
+        ops.append(model.latent)
     ops.extend(train_ops)
     return session.run(ops, f_dict)[:-len(train_ops)]
 
@@ -44,11 +46,8 @@ def call_gan_session(session, model, random_dims, generator=False):
     return session.run(ops, f_dict)[:-1]
 
 
-def generate_sentences(session, model, random_dims, vocab):
-    '''Generate novel sentences using the generator.'''
-    f_dict = {model.rand_input: get_random_sample(random_dims)}
-    output = session.run(model.generated, f_dict)
-    print '\nVisualizing new batch!'
+def display_sentences(output, vocab):
+    '''Display sentences from indices.'''
     for i, sent in enumerate(output):
         print 'Sentence %d:' % i,
         for word in sent:
@@ -57,6 +56,21 @@ def generate_sentences(session, model, random_dims, vocab):
             print vocab.vocab[word],
         print
     print
+
+
+def generate_sentences(session, model, random_dims, vocab, mle_generator=False, true_output=None):
+    '''Generate sentences using the generator, either novel or from known encodings (mle_generator).
+    '''
+    if mle_generator:
+        print '\nTrue output'
+        display_sentences(true_output, vocab)
+        print '\nSentences generated from true encodings'
+        f_dict = {model.rand_input: random_dims}
+    else:
+        print '\nNovel sentences: new batch'
+        f_dict = {model.rand_input: get_random_sample(random_dims)}
+    output = session.run(model.generated, f_dict)
+    display_sentences(output, vocab)
 
 
 def save_model(session, saver, config, perp, cur_iters):
@@ -69,8 +83,8 @@ def save_model(session, saver, config, perp, cur_iters):
     print "Saved to", save_file
 
 
-def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab, saver, steps,
-              max_steps, gen_every=0, use_gan=True):
+def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader, config, vocab,
+              saver, steps, max_steps, gen_every=0, use_gan=True):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -82,10 +96,23 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
     shortterm_gan_costs = 0.0
     shortterm_iters = 0
     shortterm_steps = 0
+    if use_gan:
+        true_output = None
+        latest_latent = None
+        latest_count = 0
 
     for step, batch in enumerate(batch_loader):
         if use_gan:
-            nll, mle_cost, d_cost = call_mle_session(session, mle_model, batch, use_gan=True)
+            latest_count += 1
+            if not random.randint(0, latest_count - 1):
+                get_latent = True
+            else:
+                get_latent = False
+            ret = call_mle_session(session, mle_model, batch, use_gan=True, get_latent=get_latent)
+            nll, mle_cost, d_cost = ret[:3]
+            if get_latent:
+                true_output = batch[0]
+                latest_latent = ret[3]
             r_cost = call_gan_session(session, gan_model, [config.batch_size, config.hidden_size])
             gan_cost = (d_cost + r_cost) / 2
             if (step + 1) % config.update_g_every == 0:
@@ -124,10 +151,17 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
             shortterm_steps = 0
             start_time = time.time()
 
-        if use_gan and gen_every > 0 and (step + 1) % gen_every == 0:
-            for _ in xrange(config.gen_samples):
-                generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
-                                   vocab)
+        if gen_every > 0 and (step + 1) % gen_every == 0:
+            if true_output is not None:
+                generate_sentences(session, mle_generator, latest_latent, vocab, True, true_output)
+            if use_gan:
+                for _ in xrange(config.gen_samples):
+                    generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
+                                       vocab)
+            latest_latent = None
+            latest_count = 0
+            true_output = None
+
         cur_iters = steps + step
         if saver is not None and cur_iters and config.save_every > 0 and \
                 cur_iters % config.save_every == 0:
@@ -136,9 +170,13 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, config, vocab,
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
-    if use_gan and gen_every < 0:
-        for _ in xrange(config.gen_samples):
-            generate_sentences(session, gan_model, [config.batch_size, config.hidden_size], vocab)
+    if gen_every < 0:
+        if true_output is not None:
+            generate_sentences(session, mle_generator, latest_latent, vocab, True, true_output)
+        if use_gan:
+            for _ in xrange(config.gen_samples):
+                generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
+                                   vocab)
 
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
@@ -165,6 +203,7 @@ def main(_):
             else:
                 test_mle_model = EncoderDecoderModel(config, vocab, False, True, None, None)
                 test_gan_model = EncoderDecoderModel(config, vocab, False, False, True, None)
+            mle_generator = EncoderDecoderModel(config, vocab, False, False, True, True, True)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
@@ -193,15 +232,16 @@ def main(_):
                 print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
                       "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
                                            session.run(gan_model.d_lr), session.run(gan_model.g_lr))
-                perplexity, steps = run_epoch(i, session, mle_model, gan_model, reader.training(),
-                                              config, vocab, saver, steps, config.max_steps,
-                                              gen_every=config.gen_every, use_gan=use_gan)
+                perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
+                                              reader.training(), config, vocab, saver, steps,
+                                              config.max_steps, gen_every=config.gen_every,
+                                              use_gan=use_gan)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
-                                              reader.validation(), config, vocab, None, 0, -1,
-                                              gen_every=-1, use_gan=use_gan)
+                                              mle_generator, reader.validation(), config, vocab,
+                                              None, 0, -1, gen_every=-1, use_gan=use_gan)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                     valid_perps.append(perplexity)
                 else:
@@ -212,8 +252,9 @@ def main(_):
                     break
         else:
             print '\nTesting'
-            perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, reader.testing(),
-                                      config, vocab, None, 0, config.max_steps, gen_every=-1)
+            perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, mle_generator,
+                                      reader.testing(), config, vocab, None, 0, config.max_steps,
+                                      gen_every=-1)
             print "Test Perplexity: %.3f" % perplexity
 
 

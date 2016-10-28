@@ -7,7 +7,8 @@ import utils
 class EncoderDecoderModel(object):
     '''The encoder-decoder adversarial model.'''
 
-    def __init__(self, config, vocab, training, mle_mode, mle_reuse, gan_reuse):
+    def __init__(self, config, vocab, training, mle_mode, mle_reuse, gan_reuse,
+                 mle_generator=False):
         self.config = config
         self.vocab = vocab
         self.training = training
@@ -43,7 +44,10 @@ class EncoderDecoderModel(object):
                                                    config.word_emb_size])])
             self.rand_input = tf.placeholder(tf.float32, [config.batch_size, config.hidden_size],
                                              name='gan_random_input')
-            self.latent = self.generate_latent(self.rand_input)
+            if mle_generator:
+                self.latent = self.rand_input
+            else:
+                self.latent = self.generate_latent(self.rand_input)
         output, states, self.generated = self.decoder(lembs, self.latent)
 
         d_out = self.discriminator(states)
