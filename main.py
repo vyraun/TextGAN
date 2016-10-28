@@ -63,9 +63,9 @@ def generate_sentences(session, model, random_dims, vocab, mle_generator=False, 
     '''
     if mle_generator:
         print '\nTrue output'
-        display_sentences(true_output, vocab)
-        print '\nSentences generated from true encodings'
-        f_dict = {model.rand_input: random_dims}
+        display_sentences(true_output[:,1:], vocab)
+        print 'Sentences generated from true encodings'
+        f_dict = {model.latent: random_dims}
     else:
         print '\nNovel sentences: new batch'
         f_dict = {model.rand_input: get_random_sample(random_dims)}
@@ -96,23 +96,19 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     shortterm_gan_costs = 0.0
     shortterm_iters = 0
     shortterm_steps = 0
-    if use_gan:
-        true_output = None
-        latest_latent = None
-        latest_count = 0
+    latest_latent = None
 
     for step, batch in enumerate(batch_loader):
+        if gen_every > 0 and (step + 1) % gen_every == 0:
+            get_latent = True
+        else:
+            get_latent = False
         if use_gan:
             latest_count += 1
-            if not random.randint(0, latest_count - 1):
-                get_latent = True
-            else:
-                get_latent = False
             ret = call_mle_session(session, mle_model, batch, use_gan=True, get_latent=get_latent)
             nll, mle_cost, d_cost = ret[:3]
             if get_latent:
-                true_output = batch[0]
-                latest_latent = ret[3]
+                latest_latent = ret[-1]
             r_cost = call_gan_session(session, gan_model, [config.batch_size, config.hidden_size])
             gan_cost = (d_cost + r_cost) / 2
             if (step + 1) % config.update_g_every == 0:
@@ -120,7 +116,10 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                                           [config.batch_size, config.hidden_size], generator=True)
                 gan_cost = (d_cost + r_cost + g_cost) / 3
         else:
-            nll, mle_cost = call_mle_session(session, mle_model, batch, use_gan=False)
+            ret = call_mle_session(session, mle_model, batch, use_gan=False, get_latent=get_latent)
+            nll, mle_cost = ret[:2]
+            if get_latent:
+                latest_latent = ret[-1]
             gan_cost = 0.0
 
         nlls += nll
@@ -129,7 +128,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         shortterm_nlls += nll
         shortterm_mle_costs += mle_cost
         shortterm_gan_costs += gan_cost
-        # batch[1] is the right aligned batch, without <eos>. predictions also have one token less.
+        # batch[1] is the right aligned batch, without <eos>. predictions also have one token less
+        # (no <sos>).
         iters += batch[1].shape[1]
         shortterm_iters += batch[1].shape[1]
         shortterm_steps += 1
@@ -152,15 +152,12 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             start_time = time.time()
 
         if gen_every > 0 and (step + 1) % gen_every == 0:
-            if true_output is not None:
-                generate_sentences(session, mle_generator, latest_latent, vocab, True, true_output)
+            if latest_latent is not None:
+                generate_sentences(session, mle_generator, latest_latent, vocab, True, batch[0])
             if use_gan:
                 for _ in xrange(config.gen_samples):
                     generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
                                        vocab)
-            latest_latent = None
-            latest_count = 0
-            true_output = None
 
         cur_iters = steps + step
         if saver is not None and cur_iters and config.save_every > 0 and \
@@ -170,13 +167,9 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
-    if gen_every < 0:
-        if true_output is not None:
-            generate_sentences(session, mle_generator, latest_latent, vocab, True, true_output)
-        if use_gan:
-            for _ in xrange(config.gen_samples):
-                generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
-                                   vocab)
+    if use_gan and gen_every < 0:
+        for _ in xrange(config.gen_samples):
+            generate_sentences(session, gan_model, [config.batch_size, config.hidden_size], vocab)
 
     perp = np.exp(nlls / iters)
     cur_iters = steps + step

@@ -42,11 +42,14 @@ class EncoderDecoderModel(object):
             # so the rest can be zeros
             lembs = tf.concat(1, [lembs, tf.zeros([config.batch_size, config.gen_sent_length - 1,
                                                    config.word_emb_size])])
-            self.rand_input = tf.placeholder(tf.float32, [config.batch_size, config.hidden_size],
-                                             name='gan_random_input')
             if mle_generator:
-                self.latent = self.rand_input
+                self.latent = tf.placeholder(tf.float32, [config.batch_size,
+                                                          config.num_layers * config.hidden_size],
+                                             name='mle_generator_input')
             else:
+                self.rand_input = tf.placeholder(tf.float32,
+                                                 [config.batch_size, config.hidden_size],
+                                                 name='gan_random_input')
                 self.latent = self.generate_latent(self.rand_input)
         output, states, self.generated = self.decoder(lembs, self.latent)
 
