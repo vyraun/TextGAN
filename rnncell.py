@@ -89,15 +89,22 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
     def expected_embedding(self, logits, prediction):
         """Use the current logits to return the embedding for the next timestep input."""
         if self.softmax_top_k == 1:
-            return tf.nn.embedding_lookup(self.embedding, prediction, name='rnn_embedding_k1')
+            with tf.device('/cpu:0'):
+                embeddings = tf.nn.embedding_lookup(self.embedding, prediction,
+                                                    name='rnn_embedding_k1')
+            return embeddings
         else:
             sm = tf.nn.softmax(logits, name='Softmax')
             if self.softmax_top_k > 0:
                 values, indices = tf.nn.top_k(sm, k=self.softmax_top_k, sorted=False)
                 values /= tf.reduce_sum(values, -1, keep_dims=True) # values is now a valid distrib
-                embeddings = tf.nn.embedding_lookup(self.embedding, indices, name='rnn_embedding')
-                embeddings = embeddings * tf.expand_dims(values, -1) # rescaled embeddings by probs
-                return tf.reduce_sum(embeddings, -2) # expected embedding
+                with tf.device('/cpu:0'):
+                    embeddings = tf.nn.embedding_lookup(self.embedding, indices,
+                                                        name='rnn_embedding')
+                    # rescaled embeddings by probs
+                    embeddings = embeddings * tf.expand_dims(values, -1)
+                    embeddings = tf.reduce_sum(embeddings, -2) # expected embedding
+                return embeddings
             else:
                 return tf.matmul(sm, self.embedding) # expectation over entire distribution
 
