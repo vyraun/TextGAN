@@ -23,7 +23,7 @@ flags.DEFINE_integer("update_g_every",    1,       "Update generator every these
 flags.DEFINE_integer("gen_sent_length",   96,      "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
-flags.DEFINE_integer("gan_wait_epochs",   0,       "The number of epochs to wait before " \
+flags.DEFINE_integer("gan_wait_epochs",   1,       "The number of epochs to wait before " \
                                                    "optimizing the GAN objectives")
 flags.DEFINE_string ("optimizer",         "adam",  "Optimizer to use (sgd, adam, adagrad, " \
                                                    "adadelta)")
@@ -36,7 +36,7 @@ flags.DEFINE_integer("max_steps",         9999999, "Maximum number of steps to r
 
 flags.DEFINE_integer("gen_samples",       1,       "Number of demo samples batches to generate " \
                                                    "per epoch")
-flags.DEFINE_integer("gen_every",         10000,   "Generate samples every these many training " \
+flags.DEFINE_integer("gen_every",         2500,    "Generate samples every these many training " \
                                                    "steps (0 to disable, -1 for each epoch)")
 flags.DEFINE_integer("print_every",       50,      "Print every these many steps")
 flags.DEFINE_integer("save_every",        -1,      "Save every these many steps (0 to disable, " \
