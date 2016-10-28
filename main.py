@@ -104,7 +104,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         else:
             get_latent = False
         if use_gan:
-            latest_count += 1
             ret = call_mle_session(session, mle_model, batch, use_gan=True, get_latent=get_latent)
             nll, mle_cost, d_cost = ret[:3]
             if get_latent:
