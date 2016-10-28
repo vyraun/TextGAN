@@ -44,10 +44,8 @@ class EncoderDecoderModel(object):
             self.rand_input = tf.placeholder(tf.float32, [config.batch_size, config.hidden_size],
                                              name='gan_random_input')
             self.latent = self.generate_latent(self.rand_input)
-        output, states = self.decoder(lembs, self.latent)
+        output, states, self.generated = self.decoder(lembs, self.latent)
 
-        if not mle_mode:
-            self.generated = tf.stop_gradient(self.output_words(output))
         d_out = self.discriminator(states)
         if mle_mode:
             # shift left the input to get the targets
@@ -138,10 +136,20 @@ class EncoderDecoderModel(object):
                                                              self.softmax_b, return_states=True),
                                                inputs, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, self.config.hidden_size])
-            states = tf.slice(outputs, [0, 0, self.config.hidden_size], [-1, -1, -1])
+            if self.mle_mode:
+                generated = None
+                skip = 0
+            else:
+                words = tf.squeeze(tf.cast(tf.slice(outputs, [0, 0, self.config.hidden_size],
+                                                    [-1, self.config.gen_sent_length - 1, 1]),
+                                           tf.int32), [-1])
+                generated = tf.stop_gradient(tf.concat(1, [words, tf.constant(self.vocab.eos_index,
+                                                               shape=[self.config.batch_size, 1])]))
+                skip = 1
+            states = tf.slice(outputs, [0, 0, self.config.hidden_size + skip], [-1, -1, -1])
             # for GRU, we skipped the last layer states because they're the outputs
             states = tf.concat(2, [states, output])
-        return output, states
+        return output, states, generated
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
@@ -163,17 +171,6 @@ class EncoderDecoderModel(object):
                                                           [tf.reshape(targets, [-1])],
                                                           [tf.reshape(mask, [-1])])
         return tf.reshape(loss, [self.config.batch_size, -1])
-
-    def output_words(self, outputs):
-        '''Get output words from RNN outputs.'''
-        output = tf.reshape(tf.concat(1, outputs), [-1, self.config.hidden_size])
-        logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(self.softmax_w),
-                                          name='softmax_transform_output'), self.softmax_b)
-        logits = tf.reshape(logits, [self.config.batch_size, -1, len(self.vocab.vocab)])
-        words = tf.slice(tf.cast(tf.argmax(logits, 2), tf.int32), [0, 0],
-                         tf.pack([-1, tf.shape(outputs)[1] - 1]))
-        return tf.concat(1, [words, tf.constant(self.vocab.eos_index,
-                                                shape=[self.config.batch_size, 1])])
 
     def discriminator(self, states):
         '''Discriminator that operates on the final states of the sentences.'''

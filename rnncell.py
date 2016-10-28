@@ -82,13 +82,14 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             skip = 0
         if self.return_states:
             size += sum(cell.state_size for cell in self.cells[:-skip])
+        if self.word_emb_size:
+            size += 1 # for the current timestep prediction
         return size
 
-    def expected_embedding(self, logits):
+    def expected_embedding(self, logits, prediction):
         """Use the current logits to return the embedding for the next timestep input."""
         if self.softmax_top_k == 1:
-            return tf.nn.embedding_lookup(self.embedding, tf.argmax(logits, 1),
-                                          name='rnn_embedding_k1')
+            return tf.nn.embedding_lookup(self.embedding, prediction, name='rnn_embedding_k1')
         else:
             sm = tf.nn.softmax(logits, name='Softmax')
             if self.softmax_top_k > 0:
@@ -121,16 +122,19 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 logits = tf.nn.bias_add(tf.matmul(cur_inp, tf.transpose(self.softmax_w),
                                                   name='Softmax_transform'),
                                         self.softmax_b)
-                new_states.append(self.expected_embedding(logits))
+                prediction = tf.argmax(logits, 1)
+                new_states.append(self.expected_embedding(logits, prediction))
                 new_states.append(tf.ones([inputs.get_shape()[0], 1])) # we have valid prev input
         if self.return_states:
+            output = [cur_inp]
             if self.embedding is not None:
                 skip = 2
+                output.append(tf.cast(tf.expand_dims(prediction, -1), tf.float32))
             else:
                 skip = 0
             if self.outputs_are_states: # skip the last layer states, since they're outputs
                 skip += 1
-            return tf.concat(1, [cur_inp] + new_states[:-skip]), tuple(new_states)
+            return tf.concat(1, output + new_states[:-skip]), tuple(new_states)
         else:
             return cur_inp, tuple(new_states)
 
