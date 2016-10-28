@@ -109,7 +109,7 @@ class EncoderDecoderModel(object):
         '''Transform a sample from the normal distribution to a sample from the latent
            representation distribution.'''
         with tf.variable_scope("Transform_Latent", reuse=self.gan_reuse):
-            rand_input = utils.highway(rand_input, layer_size=2)
+            rand_input = utils.highway(rand_input, layer_size=1)
             latent = utils.linear(rand_input, self.config.num_layers * self.config.hidden_size,
                                   True)
         return tf.nn.tanh(latent)
