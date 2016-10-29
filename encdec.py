@@ -191,7 +191,10 @@ class EncoderDecoderModel(object):
                 gather_indices = tf.concat(1, [meta_indices, tf.ones_like(meta_indices)])
                 indices = tf.cast(tf.gather_nd(eos_locs, gather_indices), tf.int32)
             final_states = utils.rowwise_lookup(states, indices) # 2D array of final states
-            output = utils.linear(final_states, 1, True, 0.0, scope='discriminator_output')
+            combined = tf.concat(1, [self.latent, final_states])
+            lin1 = tf.nn.relu(utils.linear(combined, self.config.hidden_size, True, 0.0,
+                                           scope='discriminator_lin1'))
+            output = utils.linear(lin1, 1, True, 0.0, scope='discriminator_output')
         return output
 
     def gan_loss(self, d_out, label):

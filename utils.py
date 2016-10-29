@@ -129,7 +129,7 @@ def rowwise_lookup(params, indices):
     return tf.gather(flattened, flattened_indices)
 
 
-def linear(args, output_size, bias, bias_start=0.0, scope=None):
+def linear(args, output_size, bias, bias_start=0.0, scope=None, initializer=None):
     """Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
     Args:
         args: a 2D Tensor or a list of 2D, batch x n, Tensors.
@@ -159,10 +159,12 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None):
 
     dtype = [a.dtype for a in args][0]
 
+    if initializer is None:
+        initializer=tf.contrib.layers.xavier_initializer(uniform=False)
     # Now the computation.
     with tf.variable_scope(scope or "Linear"):
         matrix = tf.get_variable("Matrix", [total_arg_size, output_size], dtype=dtype,
-                                 initializer=tf.contrib.layers.xavier_initializer())
+                                 initializer=initializer)
         if len(args) == 1:
             res = tf.matmul(args[0], matrix)
         else:
