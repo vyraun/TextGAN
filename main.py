@@ -85,7 +85,7 @@ def save_model(session, saver, config, perp, cur_iters):
 
 
 def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader, config, vocab,
-              saver, steps, max_steps, gen_every=0, use_gan=True):
+              saver, steps, max_steps, gen_every=0):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -99,49 +99,40 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     shortterm_steps = 0
     nogan_steps = 0
     latest_latent = None
-    if use_gan:
-        scheduler = utils.Scheduler(config.maintain_d_acc, config.d_acc_slack,
-                                    config.max_perplexity)
+    scheduler = utils.Scheduler(config.maintain_d_acc, config.d_acc_slack, config.max_perplexity)
 
     for step, batch in enumerate(batch_loader):
         if gen_every > 0 and (step + 1) % gen_every == 0:
             get_latent = True
         else:
             get_latent = False
-        if use_gan:
-            update_d = scheduler.update_d()
-            update_g = scheduler.update_g()
-            ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
-                                   get_latent=get_latent)
-            nll, mle_cost = ret[:2]
-            if update_d:
-                d_cost = ret[2]
-            else:
-                d_cost = -1.0
-            if get_latent:
-                latest_latent = ret[-1]
-            if update_d:
-                r_cost = call_gan_session(session, gan_model,
-                                          [config.batch_size, config.hidden_size])[0]
-            else:
-                r_cost = -1.0
-            if update_g:
-                g_cost = call_gan_session(session, gan_model,
-                                         [config.batch_size, config.hidden_size], generator=True)[0]
-            else:
-                g_cost = -1.0
-            costs = [c for c in [d_cost, r_cost, g_cost] if c > 0.0]
-            if not costs:
-                nogan_steps += 1
-                gan_cost = 0.0
-            else:
-                gan_cost = np.mean(costs)
+        update_d = scheduler.update_d()
+        update_g = scheduler.update_g()
+        ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
+                               get_latent=get_latent)
+        nll, mle_cost = ret[:2]
+        if update_d:
+            d_cost = ret[2]
         else:
-            ret = call_mle_session(session, mle_model, batch, use_gan=False, get_latent=get_latent)
-            nll, mle_cost = ret[:2]
-            if get_latent:
-                latest_latent = ret[-1]
+            d_cost = -1.0
+        if get_latent:
+            latest_latent = ret[-1]
+        if update_d:
+            r_cost = call_gan_session(session, gan_model,
+                                      [config.batch_size, config.hidden_size])[0]
+        else:
+            r_cost = -1.0
+        if update_g:
+            g_cost = call_gan_session(session, gan_model,
+                                     [config.batch_size, config.hidden_size], generator=True)[0]
+        else:
+            g_cost = -1.0
+        costs = [c for c in [d_cost, r_cost, g_cost] if c > 0.0]
+        if not costs:
+            nogan_steps += 1
             gan_cost = 0.0
+        else:
+            gan_cost = np.mean(costs)
 
         nlls += nll
         mle_costs += mle_cost
@@ -158,15 +149,14 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if step % config.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
-            if use_gan and shortterm_steps > nogan_steps:
+            if shortterm_steps > nogan_steps:
                 avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
                 d_acc = np.exp(-avg_gan_cost)
             else:
                 avg_gan_cost = -1.0
                 d_acc = 0.0
-            if use_gan:
-                scheduler.add_d_acc(d_acc)
-                scheduler.add_perp(np.exp(avg_nll))
+            scheduler.add_d_acc(d_acc)
+            scheduler.add_perp(np.exp(avg_nll))
             print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
                   "d_acc: %.4f  speed: %.0f wps" %
                   (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
@@ -183,10 +173,9 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if gen_every > 0 and (step + 1) % gen_every == 0:
             if latest_latent is not None:
                 generate_sentences(session, mle_generator, latest_latent, vocab, True, batch[0])
-            if use_gan:
-                for _ in xrange(config.gen_samples):
-                    generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
-                                       vocab)
+            for _ in xrange(config.gen_samples):
+                generate_sentences(session, gan_model, [config.batch_size, config.hidden_size],
+                                   vocab)
 
         cur_iters = steps + step
         if saver is not None and cur_iters and config.save_every > 0 and \
@@ -196,7 +185,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
-    if use_gan and gen_every < 0:
+    if gen_every < 0:
         for _ in xrange(config.gen_samples):
             generate_sentences(session, gan_model, [config.batch_size, config.hidden_size], vocab)
 
@@ -246,24 +235,19 @@ def main(_):
             mle_model.assign_mle_lr(session, config.mle_learning_rate)
             gan_model.assign_d_lr(session, config.d_learning_rate)
             gan_model.assign_g_lr(session, config.g_learning_rate)
-            use_gan = False
             for i in xrange(config.max_epoch):
-                if i == config.gan_wait_epochs:
-                    print 'Enabling GAN training!'
-                    use_gan = True
                 print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
                       "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
                                            session.run(gan_model.d_lr), session.run(gan_model.g_lr))
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
                                               reader.training(), config, vocab, saver, steps,
-                                              config.max_steps, gen_every=config.gen_every,
-                                              use_gan=use_gan)
+                                              config.max_steps, gen_every=config.gen_every)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
                                               mle_generator, reader.validation(), config, vocab,
-                                              None, 0, -1, gen_every=-1, use_gan=use_gan)
+                                              None, 0, -1, gen_every=-1)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                     valid_perps.append(perplexity)
                 else:

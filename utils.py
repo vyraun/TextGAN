@@ -31,22 +31,57 @@ def fix_word(word):
     return word
 
 
-class Scheduler(object): # TODO
+class Scheduler(object):
     '''Scheduler for GANs'''
-    def __init__(self, maintain, slack, max_perp):
-        pass
+    def __init__(self, maintain, slack, max_perp, list_size=6, decay=0.66):
+        self.maintain = maintain
+        self.slack = slack
+        self.max_perp = max_perp
+        self.list_size = list_size
+        self.d_accs = []
+        self.perps = []
+        coeffs = [1.0]
+        for _ in xrange(list_size - 1):
+            coeffs.append(coeffs[-1] * decay)
+        self.coeffs = np.array(coeffs) / sum(coeffs)
 
     def add_d_acc(self, d_acc):
-        pass
+        '''Observe new descriminator accuracy.'''
+        self.d_accs.insert(0, d_acc)
+        if len(self.d_accs) > self.list_size:
+            self.d_accs.pop()
 
     def add_perp(self, perp):
-        pass
+        '''Observe new perplexity.'''
+        self.perps.insert(0, perp)
+        if len(self.perps) > self.list_size:
+            self.perps.pop()
+
+    def _current_perp(self):
+        '''Smooth approximation of current perplexity.'''
+        return np.sum(np.array(self.perps) * self.coeffs)
+
+    def _current_d_acc(self):
+        '''Smooth approximation of current descriminator accuracy.'''
+        return np.sum(np.array(self.d_accs) * self.coeffs)
 
     def update_d(self):
-        return True
+        '''Whether or not to update the descriminator.'''
+        if self._current_perp() > self.max_perp:
+            return False
+        if self._current_d_acc() < self.maintain + self.slack:
+            return True
+        else:
+            return False
 
     def update_g(self):
-        return True
+        '''Whether or not to update the generator.'''
+        if self._current_perp() > self.max_perp:
+            return False
+        if self._current_d_acc() > self.maintain - self.slack:
+            return True
+        else:
+            return False
 
 
 def read_words(line):
