@@ -97,6 +97,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     shortterm_iters = 0
     shortterm_steps = 0
     latest_latent = None
+    if use_gan:
+        scheduler = utils.Scheduler()
 
     for step, batch in enumerate(batch_loader):
         if gen_every > 0 and (step + 1) % gen_every == 0:
@@ -138,6 +140,9 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
             avg_gan_cost = shortterm_gan_costs / shortterm_steps
             d_acc = np.exp(-avg_gan_cost)
+            if use_gan:
+                scheduler.add_d_acc(d_acc)
+                scheduler.add_perp(np.exp(avg_nll))
             print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
                   "d_acc: %.4f  speed: %.0f wps" %
                   (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,

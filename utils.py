@@ -31,6 +31,27 @@ def fix_word(word):
     return word
 
 
+class Scheduler(object): # TODO
+    '''Scheduler for GANs'''
+    def __init__(maintain, slack, max_perp):
+        pass
+
+    def add_d_acc(d_acc):
+        pass
+
+    def add_perp(perp):
+        pass
+
+    def update_mle():
+        return False
+
+    def update_d():
+        return False
+
+    def update_g():
+        return False
+
+
 def read_words(line):
     # workaround to get the NLTK tokenization deal with <unk> nicely
     for raw_word in nltk.word_tokenize(line.replace('<unk>', '-unk-')):
