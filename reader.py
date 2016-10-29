@@ -17,11 +17,12 @@ class Vocab(object):
     '''Stores the vocab: forward and reverse mappings'''
     def __init__(self, config):
         self.config = config
-        self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>']
+        self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>', '<drop>']
         self.vocab_lookup = {w:i for i,w in enumerate(self.vocab)}
         self.unk_index = self.vocab_lookup.get('<unk>')
         self.sos_index = self.vocab_lookup.get('<sos>')
         self.eos_index = self.vocab_lookup.get('<eos>')
+        self.drop_index = self.vocab_lookup.get('<drop>') # for word dropout
 
 
     def load_by_parsing(self, save=False, verbose=True):
@@ -124,7 +125,7 @@ class Reader(object):
         ret = []
         for word in sent:
             if random.random() < self.config.word_dropout:
-                ret.append(self.vocab.unk_index)
+                ret.append(self.vocab.drop_index)
             else:
                 ret.append(word)
         return ret
