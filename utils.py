@@ -2,6 +2,7 @@ import itertools
 import re
 
 import nltk
+import numpy as np
 import tensorflow as tf
 
 
@@ -67,7 +68,7 @@ class Scheduler(object):
 
     def update_d(self):
         '''Whether or not to update the descriminator.'''
-        if self._current_perp() > self.max_perp:
+        if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
             return False
         if self._current_d_acc() < self.maintain + self.slack:
             return True
@@ -76,7 +77,7 @@ class Scheduler(object):
 
     def update_g(self):
         '''Whether or not to update the generator.'''
-        if self._current_perp() > self.max_perp:
+        if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
             return False
         if self._current_d_acc() > self.maintain - self.slack:
             return True
