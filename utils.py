@@ -34,9 +34,9 @@ def fix_word(word):
 
 class Scheduler(object):
     '''Scheduler for GANs'''
-    def __init__(self, maintain, slack, max_perp, list_size=6, decay=0.66):
-        self.maintain = maintain
-        self.slack = slack
+    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size=6, decay=0.66):
+        self.min_d_acc = min_d_acc
+        self.max_d_acc = max_d_acc
         self.max_perp = max_perp
         self.list_size = list_size
         self.d_accs = []
@@ -70,7 +70,7 @@ class Scheduler(object):
         '''Whether or not to update the descriminator.'''
         if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
             return False
-        if self._current_d_acc() < self.maintain + self.slack:
+        if self._current_d_acc() < self.max_d_acc:
             return True
         else:
             return False
@@ -79,7 +79,7 @@ class Scheduler(object):
         '''Whether or not to update the generator.'''
         if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
             return False
-        if self._current_d_acc() > self.maintain - self.slack:
+        if self._current_d_acc() > self.min_d_acc:
             return True
         else:
             return False
