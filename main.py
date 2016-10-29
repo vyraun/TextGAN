@@ -158,8 +158,12 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if step % config.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
-            avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
-            d_acc = np.exp(-avg_gan_cost)
+            if use_gan and shortterm_steps > nogan_steps:
+                avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
+                d_acc = np.exp(-avg_gan_cost)
+            else:
+                avg_gan_cost = -1.0
+                d_acc = 0.0
             if use_gan:
                 scheduler.add_d_acc(d_acc)
                 scheduler.add_perp(np.exp(avg_nll))
