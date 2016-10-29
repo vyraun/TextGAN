@@ -9,6 +9,7 @@ import tensorflow as tf
 from config import Config
 from encdec import EncoderDecoderModel
 from reader import Reader, Vocab
+import utils
 
 
 def call_mle_session(session, model, batch, use_gan, get_latent=False):
@@ -96,9 +97,11 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     shortterm_gan_costs = 0.0
     shortterm_iters = 0
     shortterm_steps = 0
+    nogan_steps = 0
     latest_latent = None
     if use_gan:
-        scheduler = utils.Scheduler()
+        scheduler = utils.Scheduler(config.maintain_d_acc, config.d_acc_slack,
+                                    config.max_perplexity)
 
     for step, batch in enumerate(batch_loader):
         if gen_every > 0 and (step + 1) % gen_every == 0:
@@ -106,16 +109,33 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         else:
             get_latent = False
         if use_gan:
-            ret = call_mle_session(session, mle_model, batch, use_gan=True, get_latent=get_latent)
-            nll, mle_cost, d_cost = ret[:3]
+            update_d = scheduler.update_d()
+            update_g = scheduler.update_g()
+            ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
+                                   get_latent=get_latent)
+            nll, mle_cost = ret[:2]
+            if update_d:
+                d_cost = ret[2]
+            else:
+                d_cost = -1.0
             if get_latent:
                 latest_latent = ret[-1]
-            r_cost = call_gan_session(session, gan_model, [config.batch_size, config.hidden_size])
-            gan_cost = (d_cost + r_cost) / 2
-            if (step + 1) % config.update_g_every == 0:
+            if update_d:
+                r_cost = call_gan_session(session, gan_model,
+                                          [config.batch_size, config.hidden_size])[0]
+            else:
+                r_cost = -1.0
+            if update_g:
                 g_cost = call_gan_session(session, gan_model,
-                                          [config.batch_size, config.hidden_size], generator=True)
-                gan_cost = (d_cost + r_cost + g_cost) / 3
+                                         [config.batch_size, config.hidden_size], generator=True)[0]
+            else:
+                g_cost = -1.0
+            costs = [c for c in [d_cost, r_cost, g_cost] if c > 0.0]
+            if not costs:
+                nogan_steps += 1
+                gan_cost = 0.0
+            else:
+                gan_cost = np.mean(costs)
         else:
             ret = call_mle_session(session, mle_model, batch, use_gan=False, get_latent=get_latent)
             nll, mle_cost = ret[:2]
@@ -138,7 +158,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if step % config.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
-            avg_gan_cost = shortterm_gan_costs / shortterm_steps
+            avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
             d_acc = np.exp(-avg_gan_cost)
             if use_gan:
                 scheduler.add_d_acc(d_acc)
@@ -153,6 +173,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             shortterm_gan_costs = 0.0
             shortterm_iters = 0
             shortterm_steps = 0
+            nogan_steps = 0
             start_time = time.time()
 
         if gen_every > 0 and (step + 1) % gen_every == 0:

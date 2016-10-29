@@ -33,23 +33,20 @@ def fix_word(word):
 
 class Scheduler(object): # TODO
     '''Scheduler for GANs'''
-    def __init__(maintain, slack, max_perp):
+    def __init__(self, maintain, slack, max_perp):
         pass
 
-    def add_d_acc(d_acc):
+    def add_d_acc(self, d_acc):
         pass
 
-    def add_perp(perp):
+    def add_perp(self, perp):
         pass
 
-    def update_mle():
-        return False
+    def update_d(self):
+        return True
 
-    def update_d():
-        return False
-
-    def update_g():
-        return False
+    def update_g(self):
+        return True
 
 
 def read_words(line):
