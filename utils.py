@@ -34,7 +34,7 @@ def fix_word(word):
 
 class Scheduler(object):
     '''Scheduler for GANs'''
-    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size=6, decay=0.4):
+    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size=5, decay=0.33):
         self.min_d_acc = min_d_acc
         self.max_d_acc = max_d_acc
         self.max_perp = max_perp
