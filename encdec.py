@@ -130,10 +130,6 @@ class EncoderDecoderModel(object):
 
     def decoder(self, inputs, latent):
         '''Use the latent representation and word inputs to predict next words.'''
-        if self.config.force_nolatent:
-            latent = None
-        if self.config.force_noinputs:
-            inputs = tf.zeros_like(inputs)
         with tf.variable_scope("Decoder", reuse=self.reuse):
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, return_states=True), inputs,
