@@ -189,8 +189,8 @@ class EncoderDecoderModel(object):
                 indices = tf.cast(tf.gather_nd(eos_locs, gather_indices), tf.int32)
             final_states = utils.rowwise_lookup(states, indices) # 2D array of final states
             combined = tf.concat(1, [self.latent, final_states])
-            lin1 = tf.nn.relu(utils.linear(combined, self.config.hidden_size, True, 0.0,
-                                           scope='discriminator_lin1'))
+            lin1 = tf.nn.elu(utils.linear(combined, self.config.hidden_size, True, 0.0,
+                                          scope='discriminator_lin1'))
             output = utils.linear(lin1, 1, True, 0.0, scope='discriminator_output')
         return output
 
