@@ -60,17 +60,25 @@ class Scheduler(object):
 
     def _current_perp(self):
         '''Smooth approximation of current perplexity.'''
-        return np.sum(np.array(self.perps) * self.coeffs)
+        coeffs = self.coeffs
+        if len(self.perps) < self.list_size:
+            coeffs = coeffs[:len(self.perps)]
+            coeffs /= np.sum(coeffs)
+        return np.sum(np.array(self.perps) * coeffs)
 
     def _current_d_acc(self):
         '''Smooth approximation of current descriminator accuracy.'''
-        return np.sum(np.array(self.d_accs) * self.coeffs)
+        coeffs = self.coeffs
+        if len(self.d_accs) < self.list_size:
+            coeffs = coeffs[:len(self.d_accs)]
+            coeffs /= np.sum(coeffs)
+        return np.sum(np.array(self.d_accs) * coeffs)
 
     def update_d(self):
         '''Whether or not to update the descriminator.'''
         if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
             return False
-        if len(self.d_accs) < self.list_size or self._current_d_acc() < self.max_d_acc:
+        if len(self.d_accs) == 0 or self._current_d_acc() < self.max_d_acc:
             return True
         else:
             return False
@@ -79,7 +87,7 @@ class Scheduler(object):
         '''Whether or not to update the generator.'''
         if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
             return False
-        if len(self.d_accs) == self.list_size and self._current_d_acc() > self.min_d_acc:
+        if len(self.d_accs) > 0 and self._current_d_acc() > self.min_d_acc:
             return True
         else:
             return False
