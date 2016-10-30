@@ -25,11 +25,18 @@ flags.DEFINE_float  ("max_d_acc",         0.92,    "Update descriminator if accu
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    10.0,    "Scheduler maintains perplexity to be under " \
                                                    "this")
+flags.DEFINE_integer("sc_list_size",      3,       "Number of previous prints to look at in " \
+                                                   "scheduler")
+flags.DEFINE_float  ("sc_decay",          0.25,    "Scheduler importance decay")
 flags.DEFINE_integer("gen_sent_length",   96,      "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
-flags.DEFINE_string ("optimizer",         "adam",  "Optimizer to use (sgd, adam, adagrad, " \
+flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, " \
                                                    "adadelta)")
+flags.DEFINE_string ("d_optimizer",       "adam",  "Discriminator optimizer to use (sgd, adam, " \
+                                                   "adagrad, adadelta)")
+flags.DEFINE_string ("g_optimizer",       "adam",  "Generator optimizer to use (sgd, adam, " \
+                                                   "adagrad, adadelta)")
 flags.DEFINE_float  ("mle_learning_rate", 1e-3,    "Optimizer initial learning rate for MLE")
 flags.DEFINE_float  ("d_learning_rate",   1e-3,    "Optimizer initial learning rate for " \
                                                    "discriminator")

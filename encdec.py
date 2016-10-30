@@ -195,9 +195,9 @@ class EncoderDecoderModel(object):
         return tf.nn.sigmoid_cross_entropy_with_logits(d_out, tf.constant(label, dtype=tf.float32,
                                                                           shape=d_out.get_shape()))
 
-    def _train(self, lr, cost, scope):
+    def _train(self, lr, cost, scope, opt_name):
         '''Generic training helper'''
-        optimizer = utils.get_optimizer(self.config, lr)
+        optimizer = utils.get_optimizer(self.config, lr, opt_name)
         tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
         grads = tf.gradients(cost, tvars)
         if self.config.max_grad_norm > 0:
@@ -209,14 +209,15 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("LR", reuse=self.mle_reuse):
             self.mle_lr = tf.get_variable("mle_lr", shape=[], initializer=tf.zeros_initializer,
                                           trainable=False)
-        return self._train(self.mle_lr, cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)')
+        return self._train(self.mle_lr, cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)',
+                           self.config.mle_optimizer)
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''
         with tf.variable_scope("LR", reuse=self.reuse):
             self.d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
                                         trainable=False)
-        return self._train(self.d_lr, cost, '.*/Discriminator')
+        return self._train(self.d_lr, cost, '.*/Discriminator', self.config.d_optimizer)
 
     def train_g(self, cost):
         '''Training op for GAN mode, generator.'''
@@ -224,7 +225,8 @@ class EncoderDecoderModel(object):
             self.g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
                                         trainable=False)
         # don't update embeddings, just update the generated distributions
-        return self._train(self.g_lr, cost, '.*/(Transform_Latent|Decoder)')
+        return self._train(self.g_lr, cost, '.*/(Transform_Latent|Decoder)',
+                           self.config.g_optimizer)
 
     def assign_mle_lr(self, session, lr_value):
         '''Change the MLE learning rate'''

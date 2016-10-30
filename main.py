@@ -99,7 +99,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     shortterm_steps = 0
     nogan_steps = 0
     latest_latent = None
-    scheduler = utils.Scheduler(config.min_d_acc, config.max_d_acc, config.max_perplexity)
+    scheduler = utils.Scheduler(config.min_d_acc, config.max_d_acc, config.max_perplexity,
+                                config.sc_list_size, config.sc_decay)
 
     for step, batch in enumerate(batch_loader):
         if gen_every > 0 and (step + 1) % gen_every == 0:

@@ -34,7 +34,7 @@ def fix_word(word):
 
 class Scheduler(object):
     '''Scheduler for GANs'''
-    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size=5, decay=0.33):
+    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay):
         self.min_d_acc = min_d_acc
         self.max_d_acc = max_d_acc
         self.max_perp = max_perp
@@ -112,15 +112,15 @@ def grouper(n, iterable, fillvalue=None):
     return itertools.izip_longest(*args, fillvalue=fillvalue)
 
 
-def get_optimizer(config, lr):
-    '''Return an optimizer based on the configuration'''
-    if config.optimizer == 'sgd':
+def get_optimizer(config, lr, name):
+    '''Return an optimizer.'''
+    if name == 'sgd':
         optimizer = tf.train.GradientDescentOptimizer(lr)
-    elif config.optimizer == 'adam':
+    elif name == 'adam':
         optimizer = tf.train.AdamOptimizer(lr)
-    elif config.optimizer == 'adagrad':
+    elif name == 'adagrad':
         optimizer = tf.train.AdagradOptimizer(lr)
-    elif config.optimizer == 'adadelta':
+    elif name == 'adadelta':
         optimizer = tf.train.AdadeltaOptimizer(lr)
     return optimizer
 
