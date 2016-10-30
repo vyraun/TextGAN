@@ -21,9 +21,9 @@ flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider 
                                                    "timestep during generation (-1 for all)")
 flags.DEFINE_float  ("min_d_acc",         0.82,    "Update generator if descriminator is better " \
                                                    "than this")
-flags.DEFINE_float  ("max_d_acc",         0.96,    "Update descriminator if accuracy less than " \
+flags.DEFINE_float  ("max_d_acc",         0.92,    "Update descriminator if accuracy less than " \
                                                    "this")
-flags.DEFINE_float  ("max_perplexity",    12.0,    "Scheduler maintains perplexity to be under " \
+flags.DEFINE_float  ("max_perplexity",    10.0,    "Scheduler maintains perplexity to be under " \
                                                    "this")
 flags.DEFINE_integer("gen_sent_length",   96,      "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
