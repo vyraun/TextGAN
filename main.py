@@ -85,7 +85,7 @@ def save_model(session, saver, config, perp, cur_iters):
 
 
 def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader, config, vocab,
-              saver, steps, max_steps, gen_every=0):
+              saver, steps, max_steps, gen_every=0, g_lr=None, d_lr=None):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -101,6 +101,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     latest_latent = None
     scheduler = utils.Scheduler(config.min_d_acc, config.max_d_acc, config.max_perplexity,
                                 config.sc_list_size, config.sc_decay)
+    if d_lr is not None:
+        session.run(tf.assign(d_lr, config.d_learning_rate))
 
     for step, batch in enumerate(batch_loader):
         if gen_every > 0 and (step + 1) % gen_every == 0:
@@ -109,6 +111,9 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             get_latent = False
         update_d = scheduler.update_d()
         update_g = scheduler.update_g()
+
+        if g_lr is not None:
+            session.run(tf.assign(g_lr, config.mle_learning_rate))
         ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
                                get_latent=get_latent)
         nll, mle_cost = ret[:2]
@@ -124,6 +129,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         else:
             r_cost = -1.0
         if update_g:
+            if g_lr is not None:
+                session.run(tf.assign(g_lr, config.g_learning_rate))
             g_cost = call_gan_session(session, gan_model,
                                      [config.batch_size, config.hidden_size], generator=True)[0]
         else:
@@ -214,14 +221,24 @@ def main(_):
     with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
         with tf.variable_scope("Model"):
             if config.training:
-                mle_model = EncoderDecoderModel(config, vocab, True, True, None, None)
-                gan_model = EncoderDecoderModel(config, vocab, True, False, True, None)
+                with tf.variable_scope("LR"):
+                    g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
+                                           trainable=False)
+                    d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
+                                           trainable=False)
+                g_optimizer = utils.get_optimizer(g_lr, config.g_optimizer)
+                d_optimizer = utils.get_optimizer(d_lr, config.d_optimizer)
+                mle_model = EncoderDecoderModel(config, vocab, True, True, None, None,
+                                                g_optimizer=g_optimizer, d_optimizer=d_optimizer)
+                gan_model = EncoderDecoderModel(config, vocab, True, False, True, None,
+                                                g_optimizer=g_optimizer, d_optimizer=d_optimizer)
                 eval_mle_model = EncoderDecoderModel(config, vocab, False, True, True, None)
                 eval_gan_model = EncoderDecoderModel(config, vocab, False, False, True, True)
             else:
                 test_mle_model = EncoderDecoderModel(config, vocab, False, True, None, None)
                 test_gan_model = EncoderDecoderModel(config, vocab, False, False, True, None)
-            mle_generator = EncoderDecoderModel(config, vocab, False, False, True, True, True)
+            mle_generator = EncoderDecoderModel(config, vocab, False, False, True, True,
+                                                mle_generator=True)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
@@ -239,16 +256,12 @@ def main(_):
             steps = 0
             train_perps = []
             valid_perps = []
-            mle_model.assign_mle_lr(session, config.mle_learning_rate)
-            gan_model.assign_d_lr(session, config.d_learning_rate)
-            gan_model.assign_g_lr(session, config.g_learning_rate)
             for i in xrange(config.max_epoch):
-                print "\nEpoch: %d MLE learning rate: %.4f, D learning rate: %.4f, " \
-                      "G learning rate: %.4f" % (i + 1, session.run(mle_model.mle_lr),
-                                           session.run(gan_model.d_lr), session.run(gan_model.g_lr))
+                print "\nEpoch: %d" % (i + 1)
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
                                               reader.training(), config, vocab, saver, steps,
-                                              config.max_steps, gen_every=config.gen_every)
+                                              config.max_steps, gen_every=config.gen_every,
+                                              g_lr=g_lr, d_lr=d_lr)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if config.validate_every > 0 and (i + 1) % config.validate_every == 0:

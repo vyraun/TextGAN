@@ -112,7 +112,7 @@ def grouper(n, iterable, fillvalue=None):
     return itertools.izip_longest(*args, fillvalue=fillvalue)
 
 
-def get_optimizer(config, lr, name):
+def get_optimizer(lr, name):
     '''Return an optimizer.'''
     if name == 'sgd':
         optimizer = tf.train.GradientDescentOptimizer(lr)

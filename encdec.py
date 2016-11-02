@@ -7,14 +7,16 @@ import utils
 class EncoderDecoderModel(object):
     '''The encoder-decoder adversarial model.'''
 
-    def __init__(self, config, vocab, training, mle_mode, mle_reuse, gan_reuse,
-                 mle_generator=False):
+    def __init__(self, config, vocab, training, mle_mode, mle_reuse, gan_reuse, g_optimizer=None,
+                 d_optimizer=None, mle_generator=False):
         self.config = config
         self.vocab = vocab
         self.training = training
         self.mle_mode = mle_mode
         self.mle_reuse = mle_reuse
         self.gan_reuse = gan_reuse
+        self.g_optimizer = g_optimizer
+        self.d_optimizer = d_optimizer
         self.reuse = mle_reuse or gan_reuse # for common variables
 
         self.embedding = self.word_embedding_matrix()
@@ -195,9 +197,8 @@ class EncoderDecoderModel(object):
         return tf.nn.sigmoid_cross_entropy_with_logits(d_out, tf.constant(label, dtype=tf.float32,
                                                                           shape=d_out.get_shape()))
 
-    def _train(self, lr, cost, scope, opt_name):
+    def _train(self, cost, scope, optimizer):
         '''Generic training helper'''
-        optimizer = utils.get_optimizer(self.config, lr, opt_name)
         tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
         grads = tf.gradients(cost, tvars)
         if self.config.max_grad_norm > 0:
@@ -206,39 +207,13 @@ class EncoderDecoderModel(object):
 
     def train_mle(self, cost):
         '''Training op for MLE mode.'''
-        with tf.variable_scope("LR", reuse=self.mle_reuse):
-            self.mle_lr = tf.get_variable("mle_lr", shape=[], initializer=tf.zeros_initializer,
-                                          trainable=False)
-        return self._train(self.mle_lr, cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)',
-                           self.config.mle_optimizer)
+        return self._train(cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)', self.g_optimizer)
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''
-        with tf.variable_scope("LR", reuse=self.reuse):
-            self.d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
-                                        trainable=False)
-        return self._train(self.d_lr, cost, '.*/Discriminator', self.config.d_optimizer)
+        return self._train(cost, '.*/Discriminator', self.d_optimizer)
 
     def train_g(self, cost):
         '''Training op for GAN mode, generator.'''
-        with tf.variable_scope("LR", reuse=self.gan_reuse):
-            self.g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
-                                        trainable=False)
         # don't update embeddings, just update the generated distributions
-        return self._train(self.g_lr, cost, '.*/(Transform_Latent|Decoder)',
-                           self.config.g_optimizer)
-
-    def assign_mle_lr(self, session, lr_value):
-        '''Change the MLE learning rate'''
-        print 'Setting MLE learning rate to', lr_value
-        session.run(tf.assign(self.mle_lr, lr_value))
-
-    def assign_d_lr(self, session, lr_value):
-        '''Change the discriminator learning rate'''
-        print 'Setting discriminator learning rate to', lr_value
-        session.run(tf.assign(self.d_lr, lr_value))
-
-    def assign_g_lr(self, session, lr_value):
-        '''Change the generator learning rate'''
-        print 'Setting generator learning rate to', lr_value
-        session.run(tf.assign(self.g_lr, lr_value))
+        return self._train(cost, '.*/(Transform_Latent|Decoder)', self.g_optimizer)
