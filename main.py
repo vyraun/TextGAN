@@ -101,8 +101,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     latest_latent = None
     scheduler = utils.Scheduler(config.min_d_acc, config.max_d_acc, config.max_perplexity,
                                 config.sc_list_size, config.sc_decay)
-    if lr_tracker is not None:
-        lr_tracker.update_d_lr(session, config.d_learning_rate)
 
     for step, batch in enumerate(batch_loader):
         if gen_every > 0 and (step + 1) % gen_every == 0:
@@ -113,7 +111,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         update_g = scheduler.update_g()
 
         if lr_tracker is not None:
-            lr_tracker.update_g_lr(session, config.mle_learning_rate)
+            lr_tracker.mle_mode()
         ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
                                get_latent=get_latent)
         nll, mle_cost = ret[:2]
@@ -130,7 +128,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             r_cost = -1.0
         if update_g:
             if lr_tracker is not None:
-                lr_tracker.update_g_lr(session, config.g_learning_rate)
+                lr_tracker.gan_mode()
             g_cost = call_gan_session(session, gan_model,
                                      [config.batch_size, config.hidden_size], generator=True)[0]
         else:
@@ -226,7 +224,7 @@ def main(_):
                                            trainable=False)
                     d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
                                            trainable=False)
-                lr_tracker = utils.LearningRateTracker(g_lr, d_lr)
+                lr_tracker = utils.LearningRateTracker(session, g_lr, d_lr)
                 g_optimizer = utils.get_optimizer(g_lr, config.g_optimizer)
                 d_optimizer = utils.get_optimizer(d_lr, config.d_optimizer)
                 mle_model = EncoderDecoderModel(config, vocab, True, True, None, None,
@@ -257,6 +255,9 @@ def main(_):
             steps = 0
             train_perps = []
             valid_perps = []
+            lr_tracker.update_mle_lr(config.mle_learning_rate)
+            lr_tracker.update_g_lr(config.g_learning_rate)
+            lr_tracker.update_d_lr(config.d_learning_rate)
             for i in xrange(config.max_epoch):
                 print "\nEpoch: %d" % (i + 1)
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,

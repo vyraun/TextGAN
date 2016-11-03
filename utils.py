@@ -95,19 +95,52 @@ class Scheduler(object):
 
 class LearningRateTracker(object):
     '''Keep track of the current learning rates so as to only do session updates when necessary.'''
-    def __init__(self, g_lr, d_lr):
+    def __init__(self, session, g_lr, d_lr, g_mle=True):
+        self.session = session
         self.g_lr = g_lr
         self.d_lr = d_lr
+        self.mle_lr_value = 0.
         self.g_lr_value = 0.
         self.d_lr_value = 0.
+        self.g_mle = g_mle
 
-    def update_g_lr(self, session, value):
-        if value != self.g_lr_value:
-            session.run(tf.assign(self.g_lr, value))
+    def _set_g_lr(self, value):
+        self.session.run(tf.assign(self.g_lr, value))
 
-    def update_d_lr(self, session, value):
-        if value != self.d_lr_value:
-            session.run(tf.assign(self.d_lr, value))
+    def _set_d_lr(self, value):
+        self.session.run(tf.assign(self.d_lr, value))
+
+    def update_mle_lr(self, value):
+        if self.mle_lr_value != value:
+            print 'Changing MLE learning rate to', value
+            if self.g_mle:
+                self._set_g_lr(value)
+            self.mle_lr_value = value
+
+    def update_g_lr(self, value):
+        if self.g_lr_value != value:
+            print 'Changing generator learning rate to', value
+            if not self.g_mle:
+                self._set_g_lr(value)
+            self.g_lr_value = value
+
+    def update_d_lr(self, value):
+        if self.d_lr_value != value:
+            print 'Changing discriminator learning rate to', value
+            self._set_d_lr(value)
+            self.d_lr_value = value
+
+    def mle_mode(self):
+        if not self.g_mle:
+            self.g_mle = True
+            if self.g_lr_value != self.mle_lr_value:
+                self._set_g_lr(self.mle_lr_value)
+
+    def gan_mode(self):
+        if self.g_mle:
+            self.g_mle = False
+            if self.g_lr_value != self.mle_lr_value:
+                self._set_g_lr(self.g_lr_value)
 
 
 def read_words(line):
