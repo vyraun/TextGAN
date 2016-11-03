@@ -33,12 +33,12 @@ flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, " \
                                                    "adadelta)")
-flags.DEFINE_string ("d_optimizer",       "adam",  "Discriminator optimizer to use (sgd, adam, " \
+flags.DEFINE_string ("d_optimizer",       "sgd",   "Discriminator optimizer to use (sgd, adam, " \
                                                    "adagrad, adadelta)")
 flags.DEFINE_string ("g_optimizer",       "adam",  "Generator optimizer to use (sgd, adam, " \
                                                    "adagrad, adadelta)")
 flags.DEFINE_float  ("mle_learning_rate", 1e-3,    "Optimizer initial learning rate for MLE")
-flags.DEFINE_float  ("d_learning_rate",   1e-3,    "Optimizer initial learning rate for " \
+flags.DEFINE_float  ("d_learning_rate",   1e-2,    "Optimizer initial learning rate for " \
                                                    "discriminator")
 flags.DEFINE_float  ("g_learning_rate",   1e-3,    "Optimizer initial learning rate for generator")
 flags.DEFINE_integer("max_epoch",         50,      "Maximum number of epochs to run for")
