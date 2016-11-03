@@ -93,6 +93,23 @@ class Scheduler(object):
             return False
 
 
+class LearningRateTracker(object):
+    '''Keep track of the current learning rates so as to only do session updates when necessary.'''
+    def __init__(self, g_lr, d_lr):
+        self.g_lr = g_lr
+        self.d_lr = d_lr
+        self.g_lr_value = 0.
+        self.d_lr_value = 0.
+
+    def update_g_lr(self, session, value):
+        if value != self.g_lr_value:
+            session.run(tf.assign(self.g_lr, value))
+
+    def update_d_lr(self, session, value):
+        if value != self.d_lr_value:
+            session.run(tf.assign(self.d_lr, value))
+
+
 def read_words(line):
     # workaround to get the NLTK tokenization deal with <unk> nicely
     for raw_word in nltk.word_tokenize(line.replace('<unk>', '-unk-')):
