@@ -60,7 +60,7 @@ class Scheduler(object):
 
     def _current_perp(self):
         '''Smooth approximation of current perplexity.'''
-        coeffs = self.coeffs
+        coeffs = self.coeffs.copy(order='K')
         if len(self.perps) < self.list_size:
             coeffs = coeffs[:len(self.perps)]
             coeffs /= np.sum(coeffs)
@@ -68,7 +68,7 @@ class Scheduler(object):
 
     def _current_d_acc(self):
         '''Smooth approximation of current descriminator accuracy.'''
-        coeffs = self.coeffs
+        coeffs = self.coeffs.copy(order='K')
         if len(self.d_accs) < self.list_size:
             coeffs = coeffs[:len(self.d_accs)]
             coeffs /= np.sum(coeffs)

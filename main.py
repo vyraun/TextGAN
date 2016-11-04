@@ -101,14 +101,14 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     latest_latent = None
     scheduler = utils.Scheduler(config.min_d_acc, config.max_d_acc, config.max_perplexity,
                                 config.sc_list_size, config.sc_decay)
+    update_d = False
+    update_g = False
 
     for step, batch in enumerate(batch_loader):
         if gen_every > 0 and (step + 1) % gen_every == 0:
             get_latent = True
         else:
             get_latent = False
-        update_d = scheduler.update_d()
-        update_g = scheduler.update_g()
 
         if lr_tracker is not None:
             lr_tracker.mle_mode()
@@ -174,6 +174,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                   (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
                    shortterm_iters * config.batch_size / (time.time() - start_time), status))
 
+            update_d = scheduler.update_d()
+            update_g = scheduler.update_g()
             shortterm_nlls = 0.0
             shortterm_mle_costs = 0.0
             shortterm_gan_costs = 0.0
