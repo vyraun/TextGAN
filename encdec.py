@@ -55,7 +55,10 @@ class EncoderDecoderModel(object):
                 self.latent = self.generate_latent(self.rand_input)
         output, states, self.generated = self.decoder(lembs, self.latent)
 
-        d_out = self.discriminator(states)
+        if self.config.d_rnn:
+            d_out = self.discriminator_rnn(states)
+        else:
+            d_out = self.discriminator_finalstate(states)
         if mle_mode:
             # shift left the input to get the targets
             targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
@@ -80,14 +83,14 @@ class EncoderDecoderModel(object):
                 self.d_train_op = tf.no_op()
                 self.g_train_op = tf.no_op()
 
-    def rnn_cell(self, latent=None, embedding=None, softmax_w=None, softmax_b=None,
+    def rnn_cell(self, num_layers, latent=None, embedding=None, softmax_w=None, softmax_b=None,
                  return_states=False):
         '''Return a multi-layer RNN cell.'''
         softmax_top_k = self.config.generator_top_k
         if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
             softmax_top_k = -1
         return rnncell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
-                                         for _ in xrange(self.config.num_layers)],
+                                         for _ in xrange(num_layers)],
                                     embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b,
                                     return_states=return_states, softmax_top_k=softmax_top_k)
 
@@ -126,7 +129,8 @@ class EncoderDecoderModel(object):
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation.'''
         with tf.variable_scope("Encoder", reuse=self.mle_reuse):
-            _, state = tf.nn.dynamic_rnn(self.rnn_cell(), inputs, dtype=tf.float32)
+            _, state = tf.nn.dynamic_rnn(self.rnn_cell(self.config.num_layers), inputs,
+                                         dtype=tf.float32)
             latent = utils.highway(state)
         return latent
 
@@ -134,10 +138,12 @@ class EncoderDecoderModel(object):
         '''Use the latent representation and word inputs to predict next words.'''
         with tf.variable_scope("Decoder", reuse=self.reuse):
             if self.mle_mode:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, return_states=True), inputs,
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(self.config.num_layers, latent,
+                                                             return_states=True), inputs,
                                                dtype=tf.float32)
             else:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(latent, self.embedding, self.softmax_w,
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(self.config.num_layers, latent,
+                                                             self.embedding, self.softmax_w,
                                                              self.softmax_b, return_states=True),
                                                inputs, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, self.config.hidden_size])
@@ -174,7 +180,19 @@ class EncoderDecoderModel(object):
                                                           [tf.reshape(mask, [-1])])
         return tf.reshape(loss, [self.config.batch_size, -1])
 
-    def discriminator(self, states):
+    def discriminator_rnn(self, states):
+        '''Discriminator that operates on the final states of the sentences.'''
+        with tf.variable_scope("Discriminator", reuse=self.reuse):
+            outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(self.config.d_num_layers,
+                                                         return_states=True), states,
+                                           dtype=tf.float32)
+            output = tf.slice(outputs, [0, 0, 0], [-1, -1, self.config.hidden_size])
+            d_states = tf.slice(outputs, [0, 0, self.config.hidden_size], [-1, -1, -1])
+            # for GRU, we skipped the last layer states because they're the outputs
+            d_states = tf.concat(2, [d_states, output])
+        return self.discriminator_finalstate(d_states)
+
+    def discriminator_finalstate(self, states):
         '''Discriminator that operates on the final states of the sentences.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
             if self.mle_mode:
