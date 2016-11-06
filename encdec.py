@@ -69,6 +69,7 @@ class EncoderDecoderModel(object):
             self.gan_cost = tf.reduce_sum(gan_loss) / config.batch_size
             if training:
                 self.mle_train_op = self.train_mle(self.mle_cost)
+                self.mle_encoder_train_op = self.train_mle_encoder(self.mle_cost)
                 self.d_train_op = self.train_d(self.gan_cost)
             else:
                 self.mle_train_op = tf.no_op()
@@ -226,6 +227,10 @@ class EncoderDecoderModel(object):
     def train_mle(self, cost):
         '''Training op for MLE mode.'''
         return self._train(cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)', self.g_optimizer)
+
+    def train_mle_encoder(self, cost):
+        '''Encoder-only training op for MLE mode.'''
+        return self._train(cost, '.*/Encoder', self.g_optimizer)
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''

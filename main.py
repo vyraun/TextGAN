@@ -12,7 +12,7 @@ from reader import Reader, Vocab
 import utils
 
 
-def call_mle_session(session, model, batch, use_gan, get_latent=False):
+def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_only=False):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.ldata: batch[0],
               model.rdata: batch[1],
@@ -20,10 +20,14 @@ def call_mle_session(session, model, batch, use_gan, get_latent=False):
               model.rdata_dropped: batch[3],
               model.lengths: batch[4]}
     ops = [model.nll, model.mle_cost]
-    train_ops = [model.mle_train_op] # this will be tf.no_op() for a non-training model
+    # training ops are tf.no_op() for a non-training model
+    if encoder_only:
+        train_ops = [model.mle_encoder_train_op]
+    else:
+        train_ops = [model.mle_train_op]
     if use_gan:
         ops.append(model.gan_cost)
-        train_ops.append(model.d_train_op) # tf.no_op() for non-training model
+        train_ops.append(model.d_train_op)
     if get_latent:
         ops.append(model.latent)
     ops.extend(train_ops)
@@ -130,7 +134,11 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if lr_tracker is not None:
                 lr_tracker.gan_mode()
             g_cost = call_gan_session(session, gan_model,
-                                     [config.batch_size, config.hidden_size], generator=True)[0]
+                                      [config.batch_size, config.hidden_size], generator=True)[0]
+            if config.encoder_after_gan:
+                ret = call_mle_session(session, mle_model, batch, use_gan=False, encoder_only=True)
+                nll = (nll + ret[0]) / 2
+                mle_cost = (mle_cost + ret[1]) / 2
         else:
             g_cost = -1.0
         costs = [c for c in [d_cost, r_cost, g_cost] if c > 0.0]
