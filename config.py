@@ -32,7 +32,7 @@ flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for dis
                                                    "recurrent)")
 flags.DEFINE_float  ("sc_decay",          0.25,    "Scheduler importance decay")
 flags.DEFINE_integer("gen_sent_length",   96,      "Maximum length of a generated sentence")
-flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
+flags.DEFINE_float  ("max_grad_norm",     20.0,    "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, " \
                                                    "adadelta)")
