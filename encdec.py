@@ -5,6 +5,7 @@ import utils
 
 
 class EncoderDecoderModel(object):
+
     '''The encoder-decoder adversarial model.'''
 
     def __init__(self, config, vocab, training, mle_mode, mle_reuse, gan_reuse, g_optimizer=None,
@@ -17,7 +18,7 @@ class EncoderDecoderModel(object):
         self.gan_reuse = gan_reuse
         self.g_optimizer = g_optimizer
         self.d_optimizer = d_optimizer
-        self.reuse = mle_reuse or gan_reuse # for common variables
+        self.reuse = mle_reuse or gan_reuse  # for common variables
 
         self.embedding = self.word_embedding_matrix()
         self.softmax_w, self.softmax_b = self.softmax_variables()
@@ -61,7 +62,7 @@ class EncoderDecoderModel(object):
             d_out = self.discriminator_finalstate(states)
         if mle_mode:
             # shift left the input to get the targets
-            targets = tf.concat(1, [self.ldata[:,1:], tf.zeros([config.batch_size, 1], tf.int32)])
+            targets = tf.concat(1, [self.ldata[:, 1:], tf.zeros([config.batch_size, 1], tf.int32)])
             mle_loss = self.mle_loss(output, targets)
             self.nll = tf.reduce_sum(mle_loss) / config.batch_size
             self.mle_cost = self.nll
@@ -91,7 +92,7 @@ class EncoderDecoderModel(object):
         if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
             softmax_top_k = -1
         return rnncell.MultiRNNCell([rnncell.GRUCell(self.config.hidden_size, latent=latent)
-                                         for _ in xrange(num_layers)],
+                                     for _ in xrange(num_layers)],
                                     embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b,
                                     return_states=return_states, softmax_top_k=softmax_top_k)
 
@@ -156,7 +157,7 @@ class EncoderDecoderModel(object):
                                                     [-1, self.config.gen_sent_length - 1, 1]),
                                            tf.int32), [-1])
                 generated = tf.stop_gradient(tf.concat(1, [words, tf.constant(self.vocab.eos_index,
-                                                               shape=[self.config.batch_size, 1])]))
+                                                                              shape=[self.config.batch_size, 1])]))
                 skip = 1
             states = tf.slice(outputs, [0, 0, self.config.hidden_size + skip], [-1, -1, -1])
             # for GRU, we skipped the last layer states because they're the outputs
@@ -200,11 +201,11 @@ class EncoderDecoderModel(object):
                 indices = self.lengths - 2
             else:
                 eos_locs = tf.where(tf.equal(self.generated, self.vocab.eos_index))
-                counts = tf.unique_with_counts(eos_locs[:,0])[2]
+                counts = tf.unique_with_counts(eos_locs[:, 0])[2]
                 meta_indices = tf.expand_dims(tf.cumsum(counts, exclusive=True), -1)
                 gather_indices = tf.concat(1, [meta_indices, tf.ones_like(meta_indices)])
                 indices = tf.cast(tf.gather_nd(eos_locs, gather_indices), tf.int32)
-            final_states = utils.rowwise_lookup(states, indices) # 2D array of final states
+            final_states = utils.rowwise_lookup(states, indices)  # 2D array of final states
             combined = tf.concat(1, [self.latent, final_states])
             lin1 = tf.nn.elu(utils.linear(combined, self.config.hidden_size, True, 0.0,
                                           scope='discriminator_lin1'))

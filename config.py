@@ -61,8 +61,8 @@ flags.DEFINE_integer("validate_every",    1,       "Validate every these many ep
 
 
 class Config(object):
+
     def __init__(self):
         # copy flag values to attributes of this Config object
         for k, v in sorted(flags.FLAGS.__dict__['__flags'].items(), key=lambda x: x[0]):
             setattr(self, k, v)
-

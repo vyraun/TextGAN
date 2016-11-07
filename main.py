@@ -68,7 +68,7 @@ def generate_sentences(session, model, random_dims, vocab, mle_generator=False, 
     '''
     if mle_generator:
         print '\nTrue output'
-        display_sentences(true_output[:,1:], vocab)
+        display_sentences(true_output[:, 1:], vocab)
         print 'Sentences generated from true encodings'
         f_dict = {model.latent: random_dims}
     else:
@@ -135,7 +135,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 lr_tracker.gan_mode()
             g_cost = call_gan_session(session, gan_model,
                                       [config.batch_size, config.hidden_size], generator=True)[0]
-            if config.encoder_after_gan: # FIXME this is weird, find a better alternative.
+            if config.encoder_after_gan:  # FIXME this is weird, find a better alternative.
                 ret = call_mle_session(session, mle_model, batch, use_gan=False, encoder_only=True)
                 nll = (nll + ret[0]) / 2
                 mle_cost = (mle_cost + ret[1]) / 2
@@ -167,22 +167,22 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if shortterm_steps > nogan_steps:
                 avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
                 d_acc = np.exp(-avg_gan_cost)
-                scheduler.add_d_acc(d_acc) # TODO do scheduler.add every time
+                scheduler.add_d_acc(d_acc)  # TODO do scheduler.add every time
             else:
                 avg_gan_cost = -1.0
                 d_acc = 0.0
             status = []
-            if update_d: # TODO print number of D and G steps taken
+            if update_d:  # TODO print number of D and G steps taken
                 status.append('D')
             if update_g:
                 status.append('G')
             status = ''.join(status)
             print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
                   "d_acc: %.4f  speed: %.0f wps  %s" %
-                  (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
+                  (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
                    shortterm_iters * config.batch_size / (time.time() - start_time), status))
 
-            update_d = scheduler.update_d() # TODO do this every time
+            update_d = scheduler.update_d()  # TODO do this every time
             update_g = scheduler.update_g()
             shortterm_nlls = 0.0
             shortterm_mle_costs = 0.0

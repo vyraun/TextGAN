@@ -14,16 +14,17 @@ import utils
 
 
 class Vocab(object):
+
     '''Stores the vocab: forward and reverse mappings'''
+
     def __init__(self, config):
         self.config = config
         self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>', '<drop>']
-        self.vocab_lookup = {w:i for i,w in enumerate(self.vocab)}
+        self.vocab_lookup = {w: i for i, w in enumerate(self.vocab)}
         self.unk_index = self.vocab_lookup.get('<unk>')
         self.sos_index = self.vocab_lookup.get('<sos>')
         self.eos_index = self.vocab_lookup.get('<eos>')
-        self.drop_index = self.vocab_lookup.get('<drop>') # for word dropout
-
+        self.drop_index = self.vocab_lookup.get('<drop>')  # for word dropout
 
     def load_by_parsing(self, save=False, verbose=True):
         '''Read the vocab from the dataset'''
@@ -67,10 +68,11 @@ class Vocab(object):
 
 
 class Reader(object):
+
     def __init__(self, config, vocab):
         self.config = config
         self.vocab = vocab
-        random.seed(0) # deterministic random
+        random.seed(0)  # deterministic random
 
     def read_lines(self, fnames):
         '''Read single lines from data'''
@@ -87,11 +89,11 @@ class Reader(object):
         for line in self.read_lines(fnames):
             lines.append(line)
             if len(lines) == buffer_size:
-                lines.sort(key=lambda x:len(x))
+                lines.sort(key=lambda x: len(x))
                 yield lines
                 lines = []
         if lines:
-            lines.sort(key=lambda x:len(x))
+            lines.sort(key=lambda x: len(x))
             mod = len(lines) % self.config.batch_size
             if mod != 0:
                 lines = [[self.vocab.sos_index, self.vocab.eos_index]
@@ -142,9 +144,10 @@ class Reader(object):
         sent_lengths = np.zeros([self.config.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
-            rightalign_batch[i, -len(s)+1:] = s[:-1] # no <eos>
+            rightalign_batch[i, -len(s) + 1:] = s[:-1]  # no <eos>
             leftalign_drop_batch[i, :len(s)] = [s[0]] + self._word_dropout(s[1:-1]) + [s[-1]]
-            rightalign_drop_batch[i, -len(s)+1:] = [s[0]] + self._word_dropout(s[1:-1]) # no <eos>
+            rightalign_drop_batch[i, -len(s) + 1:] = [
+                s[0]] + self._word_dropout(s[1:-1])  # no <eos>
             sent_lengths[i] = len(s)
         return (leftalign_batch, rightalign_batch, leftalign_drop_batch, rightalign_drop_batch,
                 sent_lengths)

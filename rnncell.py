@@ -4,6 +4,7 @@ import utils
 
 
 class GRUCell(tf.nn.rnn_cell.RNNCell):
+
     """Gated Recurrent Unit cell (cf. http://arxiv.org/abs/1406.1078).
        This variant can be conditioned on a provided latent variable.
        Based on the code from TensorFlow."""
@@ -23,8 +24,8 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
 
     def __call__(self, inputs, state, scope=None):
         """Gated recurrent unit (GRU) with num_units cells."""
-        with tf.variable_scope(scope or type(self).__name__): # "GRUCell"
-            with tf.variable_scope("Gates"): # Reset gate and update gate.
+        with tf.variable_scope(scope or type(self).__name__):  # "GRUCell"
+            with tf.variable_scope("Gates"):  # Reset gate and update gate.
                 # We start with bias of 1.0 to not reset and not update.
                 factors = [inputs, state]
                 if self.latent is not None:
@@ -41,6 +42,7 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
 
 
 class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
+
     """RNN cell composed sequentially of multiple simple cells."""
 
     def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None, return_states=False,
@@ -59,7 +61,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.softmax_w = softmax_w
         self.softmax_b = softmax_b
         self.return_states = return_states
-        self.outputs_are_states = outputs_are_states # should be true for GRUs
+        self.outputs_are_states = outputs_are_states  # should be true for GRUs
         self.softmax_top_k = softmax_top_k
         if embedding is not None:
             self.word_emb_size = embedding.get_shape()[1]
@@ -83,7 +85,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         if self.return_states:
             size += sum(cell.state_size for cell in self.cells[:-skip])
         if self.word_emb_size:
-            size += 1 # for the current timestep prediction
+            size += 1  # for the current timestep prediction
         return size
 
     def expected_embedding(self, logits, prediction):
@@ -97,22 +99,22 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             sm = tf.nn.softmax(logits, name='Softmax')
             if self.softmax_top_k > 0:
                 values, indices = tf.nn.top_k(sm, k=self.softmax_top_k, sorted=False)
-                values /= tf.reduce_sum(values, -1, keep_dims=True) # values is now a valid distrib
+                values /= tf.reduce_sum(values, -1, keep_dims=True)  # values is now a valid distrib
                 with tf.device('/cpu:0'):
                     embeddings = tf.nn.embedding_lookup(self.embedding, indices,
                                                         name='rnn_embedding')
                     # rescaled embeddings by probs
                     embeddings = embeddings * tf.expand_dims(values, -1)
-                    embeddings = tf.reduce_sum(embeddings, -2) # expected embedding
+                    embeddings = tf.reduce_sum(embeddings, -2)  # expected embedding
                 return embeddings
             else:
-                return tf.matmul(sm, self.embedding) # expectation over entire distribution
+                return tf.matmul(sm, self.embedding)  # expectation over entire distribution
 
     def __call__(self, inputs, state, scope=None):
         """Run this multi-layer cell on inputs, starting from state."""
         with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
             if self.embedding is not None:
-                cur_inp = tf.select(tf.greater(state[-1][:,0], 0.5), state[-2], inputs)
+                cur_inp = tf.select(tf.greater(state[-1][:, 0], 0.5), state[-2], inputs)
             else:
                 cur_inp = inputs
             new_states = []
@@ -120,7 +122,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 with tf.variable_scope("Layer%d" % i):
                     if not tf.nn.nest.is_sequence(state):
                         raise ValueError(
-                                       "Expected state to be a tuple of length %d, but received: %s"
+                            "Expected state to be a tuple of length %d, but received: %s"
                                        % (len(self.state_size), state))
                     cur_state = state[i]
                     cur_inp, new_state = cell(cur_inp, cur_state)
@@ -131,7 +133,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                                         self.softmax_b)
                 prediction = tf.argmax(logits, 1)
                 new_states.append(self.expected_embedding(logits, prediction))
-                new_states.append(tf.ones([inputs.get_shape()[0], 1])) # we have valid prev input
+                new_states.append(tf.ones([inputs.get_shape()[0], 1]))  # we have valid prev input
         if self.return_states:
             output = [cur_inp]
             if self.embedding is not None:
@@ -139,9 +141,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 output.append(tf.cast(tf.expand_dims(prediction, -1), tf.float32))
             else:
                 skip = 0
-            if self.outputs_are_states: # skip the last layer states, since they're outputs
+            if self.outputs_are_states:  # skip the last layer states, since they're outputs
                 skip += 1
             return tf.concat(1, output + new_states[:-skip]), tuple(new_states)
         else:
             return cur_inp, tuple(new_states)
-

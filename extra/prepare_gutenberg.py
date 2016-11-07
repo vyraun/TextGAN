@@ -11,14 +11,14 @@ import unicodedata
 
 import nltk
 
-input_dir = 'gutenberg' # raw text dir
+input_dir = 'gutenberg'  # raw text dir
 
-data_coverage = 0.97 # decide vocab based on how much of the data should be covered
+data_coverage = 0.97  # decide vocab based on how much of the data should be covered
 
 MIN_LEN = 4
-MAX_LEN = 49 # 12 for data_short
+MAX_LEN = 49  # 12 for data_short
 
-val_split = 0.0004 # gutenberg is huge
+val_split = 0.0004  # gutenberg is huge
 test_split = 0.0006
 train_split = 1.0 - val_split - test_split
 
@@ -45,7 +45,7 @@ def process(output, vocab, lines):
         words = [w for w in words if w]
         for word in words:
             vocab[word] += 1
-        if len(words) >= MIN_LEN and len(words) <= MAX_LEN: # ignore very short and long sentences
+        if len(words) >= MIN_LEN and len(words) <= MAX_LEN:  # ignore very short and long sentences
             output.append(words)
 
 
@@ -95,7 +95,7 @@ if __name__ == '__main__':
                 else:
                     paragraph.append(line)
             process(output, vocab, paragraph)
-        if (i+1) % 50 == 0:
+        if (i + 1) % 50 == 0:
             summarize(output, vocab)
 
     train_N, val_N, test_N = summarize(output, vocab)
@@ -104,11 +104,11 @@ if __name__ == '__main__':
     for vocab_size in xrange(vocab.B()):
         count += top_words[vocab_size][1]
         if count / vocab.N() >= data_coverage:
-            top_words = set(w for w,c in vocab.most_common(vocab_size+1))
+            top_words = set(w for w, c in vocab.most_common(vocab_size + 1))
             break
     print 'Final vocab size:', len(top_words)
 
     random.shuffle(output)
     create_file('train.txt', output[:train_N], top_words)
-    create_file('test.txt', output[train_N:train_N+test_N], top_words)
-    create_file('valid.txt', output[train_N+test_N:], top_words)
+    create_file('test.txt', output[train_N:train_N + test_N], top_words)
+    create_file('valid.txt', output[train_N + test_N:], top_words)

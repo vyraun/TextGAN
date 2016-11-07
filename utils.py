@@ -6,34 +6,10 @@ import numpy as np
 import tensorflow as tf
 
 
-class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-
-
-def print_color(s, color=None):
-    if color:
-        print color + str(s) + Colors.ENDC,
-    else:
-        print s,
-
-
-fix_re = re.compile(r'''[^a-z0-9"'?.,]+''')
-num_re = re.compile(r'[0-9]+')
-
-def fix_word(word):
-    word = word.lower()
-    word = fix_re.sub('', word)
-    word = num_re.sub('#', word)
-    return word
-
-
 class Scheduler(object):
+
     '''Scheduler for GANs'''
+
     def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay):
         self.min_d_acc = min_d_acc
         self.max_d_acc = max_d_acc
@@ -94,7 +70,9 @@ class Scheduler(object):
 
 
 class LearningRateTracker(object):
+
     '''Keep track of the current learning rates so as to only do session updates when necessary.'''
+
     def __init__(self, session, g_lr, d_lr, g_mle=True):
         self.session = session
         self.g_lr = g_lr
@@ -141,6 +119,17 @@ class LearningRateTracker(object):
             self.g_mle = False
             if self.g_lr_value != self.mle_lr_value:
                 self._set_g_lr(self.g_lr_value)
+
+
+fix_re = re.compile(r'''[^a-z0-9"'?.,]+''')
+num_re = re.compile(r'[0-9]+')
+
+
+def fix_word(word):
+    word = word.lower()
+    word = fix_re.sub('', word)
+    word = num_re.sub('#', word)
+    return word
 
 
 def read_words(line):
@@ -218,7 +207,7 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None, initializer=None
     dtype = [a.dtype for a in args][0]
 
     if initializer is None:
-        initializer=tf.contrib.layers.xavier_initializer(uniform=False)
+        initializer = tf.contrib.layers.xavier_initializer(uniform=False)
     # Now the computation.
     with tf.variable_scope(scope or "Linear"):
         matrix = tf.get_variable("Matrix", [total_arg_size, output_size], dtype=dtype,
@@ -247,7 +236,7 @@ def highway(input_, layer_size=1, bias=-2, f=tf.nn.tanh):
     size = shape[1]
     for idx in xrange(layer_size):
         output = f(linear(input_, size, False, scope='Highway_Nonlin_%d' % idx))
-        transform_gate = tf.sigmoid(linear(input_, size, False, scope='Highway_Gate_%d' % idx) \
+        transform_gate = tf.sigmoid(linear(input_, size, False, scope='Highway_Gate_%d' % idx)
                                     + bias)
         carry_gate = 1.0 - transform_gate
         output = transform_gate * output + carry_gate * input_
