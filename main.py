@@ -135,7 +135,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 lr_tracker.gan_mode()
             g_cost = call_gan_session(session, gan_model,
                                       [config.batch_size, config.hidden_size], generator=True)[0]
-            if config.encoder_after_gan:
+            if config.encoder_after_gan: # FIXME this is weird, find a better alternative.
                 ret = call_mle_session(session, mle_model, batch, use_gan=False, encoder_only=True)
                 nll = (nll + ret[0]) / 2
                 mle_cost = (mle_cost + ret[1]) / 2
@@ -167,12 +167,12 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if shortterm_steps > nogan_steps:
                 avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
                 d_acc = np.exp(-avg_gan_cost)
-                scheduler.add_d_acc(d_acc)
+                scheduler.add_d_acc(d_acc) # TODO do scheduler.add every time
             else:
                 avg_gan_cost = -1.0
                 d_acc = 0.0
             status = []
-            if update_d:
+            if update_d: # TODO print number of D and G steps taken
                 status.append('D')
             if update_g:
                 status.append('G')
@@ -182,7 +182,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                   (epoch+1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
                    shortterm_iters * config.batch_size / (time.time() - start_time), status))
 
-            update_d = scheduler.update_d()
+            update_d = scheduler.update_d() # TODO do this every time
             update_g = scheduler.update_g()
             shortterm_nlls = 0.0
             shortterm_mle_costs = 0.0
