@@ -177,10 +177,14 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if update_g:
                 status.append('G')
             status = ''.join(status)
+            if cfg.char_model:
+                ps_str = 'cps'
+            else:
+                ps_str = 'wps'
             print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
-                  "d_acc: %.4f  speed: %.0f wps  %s" %
+                  "d_acc: %.4f  speed: %.0f %s  %s" %
                   (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
-                   shortterm_iters * cfg.batch_size / (time.time() - start_time), status))
+                   shortterm_iters * cfg.batch_size / (time.time() - start_time), ps_str, status))
 
             update_d = scheduler.update_d()  # TODO do this every time
             update_g = scheduler.update_g()
