@@ -3,7 +3,7 @@ import collections
 import tensorflow as tf
 
 flags = tf.flags
-FLAGS = flags.FLAGS
+cfg = flags.FLAGS
 
 
 # command-line config

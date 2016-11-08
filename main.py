@@ -6,7 +6,7 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from config import FLAGS
+from config import cfg
 from encdec import EncoderDecoderModel
 from reader import Reader, Vocab
 import utils
@@ -80,8 +80,8 @@ def generate_sentences(session, model, random_dims, vocab, mle_generator=False, 
 
 def save_model(session, saver, perp, cur_iters):
     '''Save model file.'''
-    save_file = FLAGS.save_file
-    if not FLAGS.save_overwrite:
+    save_file = cfg.save_file
+    if not cfg.save_overwrite:
         save_file = save_file + '.' + str(cur_iters)
     print "Saving model (epoch perplexity: %.3f) ..." % perp
     save_file = saver.save(session, save_file)
@@ -103,8 +103,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     shortterm_steps = 0
     nogan_steps = 0
     latest_latent = None
-    scheduler = utils.Scheduler(FLAGS.min_d_acc, FLAGS.max_d_acc, FLAGS.max_perplexity,
-                                FLAGS.sc_list_size, FLAGS.sc_decay)
+    scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
+                                cfg.sc_list_size, cfg.sc_decay)
     update_d = False
     update_g = False
 
@@ -127,15 +127,15 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             latest_latent = ret[-1]
         if update_d:
             r_cost = call_gan_session(session, gan_model,
-                                      [FLAGS.batch_size, FLAGS.hidden_size])[0]
+                                      [cfg.batch_size, cfg.hidden_size])[0]
         else:
             r_cost = -1.0
         if update_g:
             if lr_tracker is not None:
                 lr_tracker.gan_mode()
             g_cost = call_gan_session(session, gan_model,
-                                      [FLAGS.batch_size, FLAGS.hidden_size], generator=True)[0]
-            if FLAGS.encoder_after_gan:  # FIXME this is weird, find a better alternative.
+                                      [cfg.batch_size, cfg.hidden_size], generator=True)[0]
+            if cfg.encoder_after_gan:  # FIXME this is weird, find a better alternative.
                 ret = call_mle_session(session, mle_model, batch, use_gan=False, encoder_only=True)
                 nll = (nll + ret[0]) / 2
                 mle_cost = (mle_cost + ret[1]) / 2
@@ -160,7 +160,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         shortterm_iters += batch[1].shape[1]
         shortterm_steps += 1
 
-        if step % FLAGS.print_every == 0:
+        if step % cfg.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
             scheduler.add_perp(np.exp(avg_nll))
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
@@ -180,7 +180,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
                   "d_acc: %.4f  speed: %.0f wps  %s" %
                   (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
-                   shortterm_iters * FLAGS.batch_size / (time.time() - start_time), status))
+                   shortterm_iters * cfg.batch_size / (time.time() - start_time), status))
 
             update_d = scheduler.update_d()  # TODO do this every time
             update_g = scheduler.update_g()
@@ -195,25 +195,25 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if gen_every > 0 and (step + 1) % gen_every == 0:
             if latest_latent is not None:
                 generate_sentences(session, mle_generator, latest_latent, vocab, True, batch[0])
-            for _ in xrange(FLAGS.gen_samples):
-                generate_sentences(session, gan_model, [FLAGS.batch_size, FLAGS.hidden_size],
+            for _ in xrange(cfg.gen_samples):
+                generate_sentences(session, gan_model, [cfg.batch_size, cfg.hidden_size],
                                    vocab)
 
         cur_iters = steps + step
-        if saver is not None and cur_iters and FLAGS.save_every > 0 and \
-                cur_iters % FLAGS.save_every == 0:
+        if saver is not None and cur_iters and cfg.save_every > 0 and \
+                cur_iters % cfg.save_every == 0:
             save_model(session, saver, np.exp(nlls / iters), cur_iters)
 
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
     if gen_every < 0:
-        for _ in xrange(FLAGS.gen_samples):
-            generate_sentences(session, gan_model, [FLAGS.batch_size, FLAGS.hidden_size], vocab)
+        for _ in xrange(cfg.gen_samples):
+            generate_sentences(session, gan_model, [cfg.batch_size, cfg.hidden_size], vocab)
 
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
-    if saver is not None and FLAGS.save_every < 0:
+    if saver is not None and cfg.save_every < 0:
         save_model(session, saver, perp, cur_iters)
     return perp, cur_iters
 
@@ -227,15 +227,15 @@ def main(_):
     config_proto.gpu_options.allow_growth = True
     with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
         with tf.variable_scope("Model"):
-            if FLAGS.training:
+            if cfg.training:
                 with tf.variable_scope("LR"):
                     g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
                                            trainable=False)
                     d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
                                            trainable=False)
                 lr_tracker = utils.LearningRateTracker(session, g_lr, d_lr)
-                g_optimizer = utils.get_optimizer(g_lr, FLAGS.g_optimizer)
-                d_optimizer = utils.get_optimizer(d_lr, FLAGS.d_optimizer)
+                g_optimizer = utils.get_optimizer(g_lr, cfg.g_optimizer)
+                d_optimizer = utils.get_optimizer(d_lr, cfg.d_optimizer)
                 mle_model = EncoderDecoderModel(vocab, True, True, None, None,
                                                 g_optimizer=g_optimizer, d_optimizer=d_optimizer)
                 gan_model = EncoderDecoderModel(vocab, True, False, True, None,
@@ -250,32 +250,32 @@ def main(_):
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
-            saver.restore(session, FLAGS.load_file)
-            print "Model restored from", FLAGS.load_file
+            saver.restore(session, cfg.load_file)
+            print "Model restored from", cfg.load_file
         except ValueError:
-            if FLAGS.training:
+            if cfg.training:
                 tf.initialize_all_variables().run()
                 print "No loadable model file, new model initialized."
             else:
                 print "You need to provide a valid model file for testing!"
                 sys.exit(1)
 
-        if FLAGS.training:
+        if cfg.training:
             steps = 0
             train_perps = []
             valid_perps = []
-            lr_tracker.update_mle_lr(FLAGS.mle_learning_rate)
-            lr_tracker.update_g_lr(FLAGS.g_learning_rate)
-            lr_tracker.update_d_lr(FLAGS.d_learning_rate)
-            for i in xrange(FLAGS.max_epoch):
+            lr_tracker.update_mle_lr(cfg.mle_learning_rate)
+            lr_tracker.update_g_lr(cfg.g_learning_rate)
+            lr_tracker.update_d_lr(cfg.d_learning_rate)
+            for i in xrange(cfg.max_epoch):
                 print "\nEpoch: %d" % (i + 1)
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
                                               reader.training(), vocab, saver, steps,
-                                              FLAGS.max_steps, gen_every=FLAGS.gen_every,
+                                              cfg.max_steps, gen_every=cfg.gen_every,
                                               lr_tracker=lr_tracker)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
-                if FLAGS.validate_every > 0 and (i + 1) % FLAGS.validate_every == 0:
+                if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
                                               mle_generator, reader.validation(), vocab,
                                               None, 0, -1, gen_every=-1)
@@ -285,12 +285,12 @@ def main(_):
                     valid_perps.append(None)
                 print 'Train:', train_perps
                 print 'Valid:', valid_perps
-                if steps >= FLAGS.max_steps:
+                if steps >= cfg.max_steps:
                     break
         else:
             print '\nTesting'
             perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, mle_generator,
-                                      reader.testing(), vocab, None, 0, FLAGS.max_steps,
+                                      reader.testing(), vocab, None, 0, cfg.max_steps,
                                       gen_every=-1)
             print "Test Perplexity: %.3f" % perplexity
 
