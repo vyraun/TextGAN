@@ -132,14 +132,23 @@ def fix_word(word):
     return word
 
 
-def read_words(line):
+def read_words(line, chars):
+    if chars:
+        first = True
     # workaround to get the NLTK tokenization deal with <unk> nicely
     for raw_word in nltk.word_tokenize(line.replace('<unk>', '-unk-')):
         if raw_word == '-unk-':
-            yield '<unk>'
+            word = '<unk>'
         else:
             word = fix_word(raw_word)
-            if word:
+        if word:
+            if chars:
+                if not first:
+                    yield ' '
+                    first = False
+                for c in word:
+                    yield c
+            else:
                 yield word
 
 

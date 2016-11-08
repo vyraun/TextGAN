@@ -18,12 +18,15 @@ class Vocab(object):
     '''Stores the vocab: forward and reverse mappings'''
 
     def __init__(self):
-        self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>', '<drop>']
+        self.vocab = ['<pad>', '<sos>', '<eos>', '<drop>']
+        if not cfg.char_model:
+            self.vocab.append('<unk>')
         self.vocab_lookup = {w: i for i, w in enumerate(self.vocab)}
-        self.unk_index = self.vocab_lookup.get('<unk>')
         self.sos_index = self.vocab_lookup.get('<sos>')
         self.eos_index = self.vocab_lookup.get('<eos>')
         self.drop_index = self.vocab_lookup.get('<drop>')  # for word dropout
+        if not cfg.char_model:
+            self.unk_index = self.vocab_lookup.get('<unk>')
 
     def load_by_parsing(self, save=False, verbose=True):
         '''Read the vocab from the dataset'''
@@ -35,7 +38,7 @@ class Vocab(object):
                 print fname
             with open(fname, 'r') as f:
                 for line in f:
-                    for word in utils.read_words(line):
+                    for word in utils.read_words(line, chars=cfg.char_model):
                         if word not in self.vocab_lookup:
                             self.vocab_lookup[word] = len(self.vocab)
                             self.vocab.append(word)
@@ -44,7 +47,10 @@ class Vocab(object):
 
     def load_from_pickle(self, verbose=True):
         '''Read the vocab from a pickled file'''
-        pkfile = cfg.vocab_file
+        if cfg.char_model:
+            pkfile = cfg.char_vocab_file
+        else:
+            pkfile = cfg.word_vocab_file
         try:
             if verbose:
                 print 'Loading vocabulary from pickle...'
@@ -62,8 +68,7 @@ class Vocab(object):
                     print 'Saved pickle file.'
 
     def lookup(self, words):
-        return [self.sos_index] + [self.vocab_lookup.get(w, self.unk_index) for w in words] + \
-               [self.eos_index]
+        return [self.sos_index] + [self.vocab_lookup.get(w) for w in words] + [self.eos_index]
 
 
 class Reader(object):
@@ -77,7 +82,8 @@ class Reader(object):
         for fname in fnames:
             with open(fname, 'r') as f:
                 for line in f:
-                    yield self.vocab.lookup([w for w in utils.read_words(line)])
+                    yield self.vocab.lookup([w for w in utils.read_words(line,
+                                                                         chars=cfg.char_model)])
 
     def buffered_read_sorted_lines(self, fnames, batches=50):
         '''Read and return a list of lines (length multiple of batch_size) worth at most $batches
