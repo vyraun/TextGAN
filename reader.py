@@ -9,7 +9,7 @@ import nltk
 import numpy as np
 import tensorflow as tf
 
-from config import Config
+from config import FLAGS
 import utils
 
 
@@ -17,8 +17,7 @@ class Vocab(object):
 
     '''Stores the vocab: forward and reverse mappings'''
 
-    def __init__(self, config):
-        self.config = config
+    def __init__(self):
         self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>', '<drop>']
         self.vocab_lookup = {w: i for i, w in enumerate(self.vocab)}
         self.unk_index = self.vocab_lookup.get('<unk>')
@@ -30,7 +29,7 @@ class Vocab(object):
         '''Read the vocab from the dataset'''
         if verbose:
             print 'Loading vocabulary by parsing...'
-        fnames = glob.glob(pjoin(self.config.data_path, '*.txt'))
+        fnames = glob.glob(pjoin(FLAGS.data_path, '*.txt'))
         for fname in fnames:
             if verbose:
                 print fname
@@ -45,7 +44,7 @@ class Vocab(object):
 
     def load_from_pickle(self, verbose=True):
         '''Read the vocab from a pickled file'''
-        pkfile = self.config.vocab_file
+        pkfile = FLAGS.vocab_file
         try:
             if verbose:
                 print 'Loading vocabulary from pickle...'
@@ -69,8 +68,7 @@ class Vocab(object):
 
 class Reader(object):
 
-    def __init__(self, config, vocab):
-        self.config = config
+    def __init__(self, vocab):
         self.vocab = vocab
         random.seed(0)  # deterministic random
 
@@ -84,7 +82,7 @@ class Reader(object):
     def buffered_read_sorted_lines(self, fnames, batches=50):
         '''Read and return a list of lines (length multiple of batch_size) worth at most $batches
            number of batches sorted in length'''
-        buffer_size = self.config.batch_size * batches
+        buffer_size = FLAGS.batch_size * batches
         lines = []
         for line in self.read_lines(fnames):
             lines.append(line)
@@ -94,39 +92,39 @@ class Reader(object):
                 lines = []
         if lines:
             lines.sort(key=lambda x: len(x))
-            mod = len(lines) % self.config.batch_size
+            mod = len(lines) % FLAGS.batch_size
             if mod != 0:
                 lines = [[self.vocab.sos_index, self.vocab.eos_index]
-                         for _ in xrange(self.config.batch_size - mod)] + lines
+                         for _ in xrange(FLAGS.batch_size - mod)] + lines
             yield lines
 
     def buffered_read(self, fnames):
         '''Read packed batches from data with each batch having lines of similar lengths'''
         for line_collection in self.buffered_read_sorted_lines(fnames):
-            batches = [b for b in utils.grouper(self.config.batch_size, line_collection)]
+            batches = [b for b in utils.grouper(FLAGS.batch_size, line_collection)]
             random.shuffle(batches)
             for batch in batches:
                 yield self.pack(batch)
 
     def training(self):
         '''Read batches from training data'''
-        for batch in self.buffered_read([pjoin(self.config.data_path, 'train.txt')]):
+        for batch in self.buffered_read([pjoin(FLAGS.data_path, 'train.txt')]):
             yield batch
 
     def validation(self):
         '''Read batches from validation data'''
-        for batch in self.buffered_read([pjoin(self.config.data_path, 'valid.txt')]):
+        for batch in self.buffered_read([pjoin(FLAGS.data_path, 'valid.txt')]):
             yield batch
 
     def testing(self):
         '''Read batches from testing data'''
-        for batch in self.buffered_read([pjoin(self.config.data_path, 'test.txt')]):
+        for batch in self.buffered_read([pjoin(FLAGS.data_path, 'test.txt')]):
             yield batch
 
     def _word_dropout(self, sent):
         ret = []
         for word in sent:
-            if random.random() < self.config.word_dropout:
+            if random.random() < FLAGS.word_dropout:
                 ret.append(self.vocab.drop_index)
             else:
                 ret.append(word)
@@ -135,13 +133,13 @@ class Reader(object):
     def pack(self, batch):
         '''Pack python-list batches into numpy batches'''
         max_size = max(len(s) for s in batch)
-        if len(batch) < self.config.batch_size:
-            batch.extend([[] for _ in xrange(self.config.batch_size - len(batch))])
-        leftalign_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
-        rightalign_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
-        leftalign_drop_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
-        rightalign_drop_batch = np.zeros([self.config.batch_size, max_size], dtype=np.int32)
-        sent_lengths = np.zeros([self.config.batch_size], dtype=np.int32)
+        if len(batch) < FLAGS.batch_size:
+            batch.extend([[] for _ in xrange(FLAGS.batch_size - len(batch))])
+        leftalign_batch = np.zeros([FLAGS.batch_size, max_size], dtype=np.int32)
+        rightalign_batch = np.zeros([FLAGS.batch_size, max_size], dtype=np.int32)
+        leftalign_drop_batch = np.zeros([FLAGS.batch_size, max_size], dtype=np.int32)
+        rightalign_drop_batch = np.zeros([FLAGS.batch_size, max_size], dtype=np.int32)
+        sent_lengths = np.zeros([FLAGS.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
             rightalign_batch[i, -len(s) + 1:] = s[:-1]  # no <eos>
@@ -155,12 +153,11 @@ class Reader(object):
 
 def main(_):
     '''Reader tests'''
-    config = Config()
 
-    vocab = Vocab(config)
+    vocab = Vocab()
     vocab.load_from_pickle()
 
-    reader = Reader(config, vocab)
+    reader = Reader(vocab)
     for batch in reader.training():
         for line in batch[0]:
             print line

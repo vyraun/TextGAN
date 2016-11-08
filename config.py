@@ -3,6 +3,8 @@ import collections
 import tensorflow as tf
 
 flags = tf.flags
+FLAGS = flags.FLAGS
+
 
 # command-line config
 flags.DEFINE_string ("data_path",  "data",              "Data path")
@@ -31,6 +33,7 @@ flags.DEFINE_integer("sc_list_size",      3,       "Number of previous prints to
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
 flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for discriminator (if " \
                                                    "recurrent)")
+flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")
 flags.DEFINE_float  ("sc_decay",          0.25,    "Scheduler importance decay")
 flags.DEFINE_integer("gen_sent_length",   96,      "Maximum length of a generated sentence")
 flags.DEFINE_float  ("max_grad_norm",     20.0,    "Gradient clipping")
@@ -58,11 +61,3 @@ flags.DEFINE_integer("save_every",        -1,      "Save every these many steps 
 flags.DEFINE_bool   ("save_overwrite",    True,    "Overwrite the same file each time")
 flags.DEFINE_integer("validate_every",    1,       "Validate every these many epochs " \
                                                    "(0 to disable)")
-
-
-class Config(object):
-
-    def __init__(self):
-        # copy flag values to attributes of this Config object
-        for k, v in sorted(flags.FLAGS.__dict__['__flags'].items(), key=lambda x: x[0]):
-            setattr(self, k, v)
