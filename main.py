@@ -105,6 +105,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     shortterm_iters = 0
     shortterm_steps = 0
     nogan_steps = 0
+    g_steps = 0
+    d_steps = 0
     latest_latent = None
     scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
                                 cfg.sc_list_size, cfg.sc_decay)
@@ -122,6 +124,16 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
                                get_latent=get_latent)
         nll, mle_cost = ret[:2]
+
+        if cfg.char_model:
+            n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
+                          1)
+        else:
+            n_words = batch[0].shape[1] - 1
+        scheduler.add_perp(np.exp(nll / n_words))
+        update_d = scheduler.update_d()
+        update_g = scheduler.update_g()
+
         if update_d:
             d_cost = ret[2]
         else:
@@ -129,11 +141,13 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if get_latent:
             latest_latent = ret[-1]
         if update_d:
+            d_steps += 1
             r_cost = call_gan_session(session, gan_model,
                                       [cfg.batch_size, cfg.hidden_size])[0]
         else:
             r_cost = -1.0
         if update_g:
+            g_steps += 1
             if lr_tracker is not None:
                 lr_tracker.gan_mode()
             g_cost = call_gan_session(session, gan_model,
@@ -150,6 +164,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             gan_cost = 0.0
         else:
             gan_cost = np.mean(costs)
+            d_acc = np.exp(-gan_cost)
+            scheduler.add_d_acc(d_acc)
 
         nlls += nll
         mle_costs += mle_cost
@@ -157,45 +173,32 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         shortterm_nlls += nll
         shortterm_mle_costs += mle_cost
         shortterm_gan_costs += gan_cost
-        if cfg.char_model:
-            n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
-                          1)
-        else:
-            n_words = batch[0].shape[1] - 1
         iters += n_words
         shortterm_iters += n_words
         shortterm_steps += 1
 
         if step % cfg.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
-            scheduler.add_perp(np.exp(avg_nll))
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
             if shortterm_steps > nogan_steps:
                 avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
                 d_acc = np.exp(-avg_gan_cost)
-                scheduler.add_d_acc(d_acc)  # TODO do scheduler.add every time
             else:
                 avg_gan_cost = -1.0
                 d_acc = 0.0
-            status = []
-            if update_d:  # TODO print number of D and G steps taken
-                status.append('D')
-            if update_g:
-                status.append('G')
-            status = ''.join(status)
             print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
-                  "d_acc: %.4f  speed: %.0f wps  %s" %
+                  "d_acc: %.4f  speed: %.0f wps  D%d G%d" %
                   (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
-                   shortterm_iters * cfg.batch_size / (time.time() - start_time), status))
+                   shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
 
-            update_d = scheduler.update_d()  # TODO do this every time
-            update_g = scheduler.update_g()
             shortterm_nlls = 0.0
             shortterm_mle_costs = 0.0
             shortterm_gan_costs = 0.0
             shortterm_iters = 0
             shortterm_steps = 0
             nogan_steps = 0
+            g_steps = 0
+            d_steps = 0
             start_time = time.time()
 
         if gen_every > 0 and (step + 1) % gen_every == 0:
