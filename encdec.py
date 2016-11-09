@@ -72,6 +72,7 @@ class EncoderDecoderModel(object):
                 self.d_train_op = self.train_d(self.gan_cost)
             else:
                 self.mle_train_op = tf.no_op()
+                self.mle_encoder_train_op = tf.no_op()
                 self.d_train_op = tf.no_op()
         else:
             gan_loss = self.gan_loss(d_out, 0)
@@ -83,13 +84,13 @@ class EncoderDecoderModel(object):
                 self.d_train_op = tf.no_op()
                 self.g_train_op = tf.no_op()
 
-    def rnn_cell(self, num_layers, latent=None, embedding=None, softmax_w=None, softmax_b=None,
-                 return_states=False):
+    def rnn_cell(self, num_layers, hidden_size, latent=None, embedding=None, softmax_w=None,
+                 softmax_b=None, return_states=False):
         '''Return a multi-layer RNN cell.'''
         softmax_top_k = cfg.generator_top_k
         if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
             softmax_top_k = -1
-        return rnncell.MultiRNNCell([rnncell.GRUCell(cfg.hidden_size, latent=latent)
+        return rnncell.MultiRNNCell([rnncell.GRUCell(hidden_size, latent=latent)
                                      for _ in xrange(num_layers)],
                                     embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b,
                                     return_states=return_states, softmax_top_k=softmax_top_k)
@@ -129,7 +130,7 @@ class EncoderDecoderModel(object):
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation in MLE mode.'''
         with tf.variable_scope("Encoder", reuse=self.mle_reuse):
-            _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers), inputs,
+            _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size), inputs,
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32)
             latent = utils.highway(state)
@@ -139,13 +140,13 @@ class EncoderDecoderModel(object):
         '''Use the latent representation and word inputs to predict next words.'''
         with tf.variable_scope("Decoder", reuse=self.reuse):
             if self.mle_mode:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
-                                                             return_states=True), inputs,
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size,
+                                                             latent, return_states=True), inputs,
                                                sequence_length=self.lengths-1, swap_memory=True,
                                                dtype=tf.float32)
             else:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
-                                                             self.embedding, self.softmax_w,
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size,
+                                                             latent, self.embedding, self.softmax_w,
                                                              self.softmax_b, return_states=True),
                                                inputs, swap_memory=True, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
@@ -194,27 +195,46 @@ class EncoderDecoderModel(object):
         '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
             if cfg.d_rnn_bidirect:
+                hidden_size = cfg.hidden_size // 2
                 lengths = tf.cast(self.lengths, tf.int64)  # workaround to make the following work
                 outputs, _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
+                                                                           hidden_size,
                                                                            return_states=True),
                                                              self.rnn_cell(cfg.d_num_layers,
+                                                                           hidden_size,
                                                                            return_states=True),
                                                              states, sequence_length=lengths-1,
                                                              swap_memory=True, dtype=tf.float32)
             else:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
+                hidden_size = cfg.hidden_size
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, hidden_size,
                                                              return_states=True), states,
                                                sequence_length=self.lengths-1, swap_memory=True,
                                                dtype=tf.float32)
                 outputs = (outputs,)  # to match bidirectional RNN's output format
             d_states = []
             for out in outputs:
-                output = tf.slice(out, [0, 0, 0], [-1, -1, cfg.hidden_size])
-                dir_states = tf.slice(out, [0, 0, cfg.hidden_size], [-1, -1, -1])
+                output = tf.slice(out, [0, 0, 0], [-1, -1, hidden_size])
+                dir_states = tf.slice(out, [0, 0, hidden_size], [-1, -1, -1])
                 # for GRU, we skipped the last layer states because they're the outputs
                 d_states.append(tf.concat(2, [dir_states, output]))
-        # FIXME this doesn't make sense with bidirectional RNN, replace with a convnet
-        return self.discriminator_finalstate(tf.concat(2, d_states))
+        return self._discriminator_conv(tf.concat(2, d_states))
+
+    def _discriminator_conv(self, states):
+        '''Convolve output of bidirectional RNN and predict the discriminator label.'''
+        with tf.variable_scope("Discriminator", reuse=self.reuse):
+            W_conv = tf.get_variable('W_conv', [cfg.d_conv_window, 1, states.get_shape()[2],
+                                                cfg.hidden_size // cfg.d_conv_window],
+                                     initializer=tf.contrib.layers.xavier_initializer())
+            b_conv = tf.get_variable('b_conv', [cfg.hidden_size // cfg.d_conv_window],
+                                     initializer=tf.constant_initializer(0.0))
+            states = tf.expand_dims(states, 2)
+            conv = tf.nn.conv2d(states, W_conv, strides=[1, 1, 1, 1], padding='SAME')
+            conv_out = tf.reshape(conv, [cfg.batch_size, -1, cfg.hidden_size // cfg.d_conv_window])
+            conv_out = tf.nn.elu(tf.nn.bias_add(conv_out, b_conv))
+            reduced = tf.reduce_mean(conv_out, [1])
+            output = utils.linear(reduced, 1, True, 0.0, scope='discriminator_output')
+        return output
 
     def discriminator_finalstate(self, states):
         '''Discriminator that operates on the final states of the sentences.'''

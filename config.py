@@ -16,10 +16,10 @@ flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab
 flags.DEFINE_bool   ("char_model",        True,    "Character-level model")
 flags.DEFINE_integer("batch_size",        32,      "Batch size")
 flags.DEFINE_integer("word_emb_size",     224,     "Word embedding size")
-flags.DEFINE_integer("char_emb_size",     50,      "Character embedding size")
+flags.DEFINE_integer("char_emb_size",     32,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  256,     "RNN hidden state size for word model")
-flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
+flags.DEFINE_integer("char_hidden_size",  768,     "RNN hidden state size for char model")
 flags.DEFINE_float  ("word_dropout",      0.0,     "Word dropout probability")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
@@ -38,6 +38,8 @@ flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
 flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for discriminator (if "
                                                    "recurrent)")
 flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")
+flags.DEFINE_integer("d_conv_window",     5,       "Convolution window for convolution on "
+                                                   "discriminative RNN's states")
 flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a generated sentence for "
                                                    "word model")
 flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a generated sentence for "

@@ -62,7 +62,6 @@ def display_sentences(output, vocab):
             print ''.join(words)
         else:
             print ' '.join(words)
-        print
     print
 
 
