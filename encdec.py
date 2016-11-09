@@ -34,7 +34,7 @@ class EncoderDecoderModel(object):
 
             embs = self.word_embeddings(self.data)
             embs_dropped = self.word_embeddings(self.data_dropped)
-            self.latent = self.encoder(embs_dropped[:, 1:])
+            self.latent = self.encoder(embs_dropped[:, 1:, :])
         else:
             # only the first timestep input will actually be considered
             embs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
