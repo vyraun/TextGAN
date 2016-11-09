@@ -15,11 +15,11 @@ flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab
 
 flags.DEFINE_bool   ("char_model",        True,    "Character-level model")
 flags.DEFINE_integer("batch_size",        32,      "Batch size")
-flags.DEFINE_integer("word_emb_size",     224,     "Word embedding size")
-flags.DEFINE_integer("char_emb_size",     32,      "Character embedding size")
+flags.DEFINE_integer("word_emb_size",     256,     "Word embedding size")
+flags.DEFINE_integer("char_emb_size",     50,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
-flags.DEFINE_integer("word_hidden_size",  256,     "RNN hidden state size for word model")
-flags.DEFINE_integer("char_hidden_size",  768,     "RNN hidden state size for char model")
+flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
+flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
 flags.DEFINE_float  ("word_dropout",      0.0,     "Word dropout probability")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
@@ -58,10 +58,9 @@ flags.DEFINE_float  ("d_learning_rate",   1e-4,    "Optimizer initial learning r
 flags.DEFINE_float  ("g_learning_rate",   1e-4,    "Optimizer initial learning rate for generator")
 flags.DEFINE_integer("max_epoch",         10000,   "Maximum number of epochs to run for")
 flags.DEFINE_integer("max_steps",         9999999, "Maximum number of steps to run for")
-
 flags.DEFINE_integer("gen_samples",       1,       "Number of demo samples batches to generate "
                                                    "per epoch")
-flags.DEFINE_integer("gen_every",         2500,    "Generate samples every these many training "
+flags.DEFINE_integer("gen_every",         500,     "Generate samples every these many training "
                                                    "steps (0 to disable, -1 for each epoch)")
 flags.DEFINE_integer("print_every",       50,      "Print every these many steps")
 flags.DEFINE_integer("save_every",        -1,      "Save every these many steps (0 to disable, "
