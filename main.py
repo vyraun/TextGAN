@@ -112,10 +112,11 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                                 cfg.sc_list_size, cfg.sc_decay)
     update_d = False
     update_g = False
+    encoder_only = False
 
     for step, batch in enumerate(batch_loader):
-        update_d = scheduler.update_d()
-        update_g = scheduler.update_g()
+        update_d = not encoder_only and scheduler.update_d()
+        update_g = not encoder_only and scheduler.update_g()
         if gen_every > 0 and (step + 1) % gen_every == 0:
             get_latent = True
         else:
@@ -124,8 +125,10 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if lr_tracker is not None:
             lr_tracker.mle_mode()
         ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
-                               get_latent=get_latent)
+                               encoder_only=encoder_only, get_latent=get_latent)
         nll, mle_cost = ret[:2]
+        if encoder_only:
+            encoder_only = False
         if update_d:
             d_cost = ret[2]
         else:
@@ -144,10 +147,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 lr_tracker.gan_mode()
             g_cost = call_gan_session(session, gan_model,
                                       [cfg.batch_size, cfg.hidden_size], generator=True)[0]
-            if cfg.encoder_after_gan:  # FIXME this is weird, find a better alternative.
-                ret = call_mle_session(session, mle_model, batch, use_gan=False, encoder_only=True)
-                nll = (nll + ret[0]) / 2
-                mle_cost = (mle_cost + ret[1]) / 2
+            if cfg.encoder_after_gan:
+                encoder_only = True
         else:
             g_cost = -1.0
         costs = [c for c in [d_cost, r_cost, g_cost] if c > 0.0]

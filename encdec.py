@@ -34,7 +34,7 @@ class EncoderDecoderModel(object):
 
             embs = self.word_embeddings(self.data)
             embs_dropped = self.word_embeddings(self.data_dropped)
-            self.latent = self.encoder(embs_dropped)
+            self.latent = self.encoder(embs_dropped[:, 1:])
         else:
             # only the first timestep input will actually be considered
             embs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
@@ -130,7 +130,7 @@ class EncoderDecoderModel(object):
         '''Encode sentence and return a latent representation in MLE mode.'''
         with tf.variable_scope("Encoder", reuse=self.mle_reuse):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers), inputs,
-                                         sequence_length=self.lengths, swap_memory=True,
+                                         sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32)
             latent = utils.highway(state)
         return latent
@@ -141,7 +141,7 @@ class EncoderDecoderModel(object):
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
                                                              return_states=True), inputs,
-                                               sequence_length=self.lengths, swap_memory=True,
+                                               sequence_length=self.lengths-1, swap_memory=True,
                                                dtype=tf.float32)
             else:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
@@ -199,12 +199,12 @@ class EncoderDecoderModel(object):
                                                                            return_states=True),
                                                              self.rnn_cell(cfg.d_num_layers,
                                                                            return_states=True),
-                                                             states, sequence_length=lengths,
+                                                             states, sequence_length=lengths-1,
                                                              swap_memory=True, dtype=tf.float32)
             else:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
                                                              return_states=True), states,
-                                               sequence_length=self.lengths, swap_memory=True,
+                                               sequence_length=self.lengths-1, swap_memory=True,
                                                dtype=tf.float32)
                 outputs = (outputs,)  # to match bidirectional RNN's output format
             d_states = []
@@ -213,7 +213,7 @@ class EncoderDecoderModel(object):
                 dir_states = tf.slice(out, [0, 0, cfg.hidden_size], [-1, -1, -1])
                 # for GRU, we skipped the last layer states because they're the outputs
                 d_states.append(tf.concat(2, [dir_states, output]))
-        # FIXME this doesn't make sense with bidirectional RNN
+        # FIXME this doesn't make sense with bidirectional RNN, replace with a convnet
         return self.discriminator_finalstate(tf.concat(2, d_states))
 
     def discriminator_finalstate(self, states):
