@@ -147,6 +147,7 @@ def read_words(line, chars):
             if chars:
                 if not first:
                     yield ' '
+                else:
                     first = False
                 for c in word:
                     yield c

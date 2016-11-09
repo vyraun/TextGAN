@@ -53,10 +53,15 @@ def display_sentences(output, vocab):
     '''Display sentences from indices.'''
     for i, sent in enumerate(output):
         print 'Sentence %d:' % i,
+        words = []
         for word in sent:
             if word == vocab.eos_index:
                 break
-            print vocab.vocab[word],
+            words.append(vocab.vocab[word])
+        if cfg.char_model:
+            print ''.join(words)
+        else:
+            print ' '.join(words)
         print
     print
 
