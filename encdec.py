@@ -130,7 +130,8 @@ class EncoderDecoderModel(object):
         '''Encode sentence and return a latent representation in MLE mode.'''
         with tf.variable_scope("Encoder", reuse=self.mle_reuse):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers), inputs,
-                                         sequence_length=self.lengths, dtype=tf.float32)
+                                         sequence_length=self.lengths, swap_memory=True,
+                                         dtype=tf.float32)
             latent = utils.highway(state)
         return latent
 
@@ -140,12 +141,13 @@ class EncoderDecoderModel(object):
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
                                                              return_states=True), inputs,
-                                               sequence_length=self.lengths, dtype=tf.float32)
+                                               sequence_length=self.lengths, swap_memory=True,
+                                               dtype=tf.float32)
             else:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
                                                              self.embedding, self.softmax_w,
                                                              self.softmax_b, return_states=True),
-                                               inputs, dtype=tf.float32)
+                                               inputs, swap_memory=True, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
             if self.mle_mode:
                 generated = None
@@ -191,15 +193,28 @@ class EncoderDecoderModel(object):
     def discriminator_rnn(self, states):
         '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
-            # TODO bidirectional RNN if cfg.d_rnn_bidirect is true
-            outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
-                                                         return_states=True), states,
-                                           sequence_length=self.lengths, dtype=tf.float32)
-            output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
-            d_states = tf.slice(outputs, [0, 0, cfg.hidden_size], [-1, -1, -1])
-            # for GRU, we skipped the last layer states because they're the outputs
-            d_states = tf.concat(2, [d_states, output])
-        return self.discriminator_finalstate(d_states)
+            if cfg.d_rnn_bidirect:
+                lengths = tf.cast(self.lengths, tf.int64)  # workaround to make the following work
+                outputs, _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
+                                                                           return_states=True),
+                                                             self.rnn_cell(cfg.d_num_layers,
+                                                                           return_states=True),
+                                                             states, sequence_length=lengths,
+                                                             swap_memory=True, dtype=tf.float32)
+            else:
+                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
+                                                             return_states=True), states,
+                                               sequence_length=self.lengths, swap_memory=True,
+                                               dtype=tf.float32)
+                outputs = (outputs,)  # to match bidirectional RNN's output format
+            d_states = []
+            for out in outputs:
+                output = tf.slice(out, [0, 0, 0], [-1, -1, cfg.hidden_size])
+                dir_states = tf.slice(out, [0, 0, cfg.hidden_size], [-1, -1, -1])
+                # for GRU, we skipped the last layer states because they're the outputs
+                d_states.append(tf.concat(2, [dir_states, output]))
+        # FIXME this doesn't make sense with bidirectional RNN
+        return self.discriminator_finalstate(tf.concat(2, d_states))
 
     def discriminator_finalstate(self, states):
         '''Discriminator that operates on the final states of the sentences.'''
