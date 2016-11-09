@@ -64,15 +64,15 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.outputs_are_states = outputs_are_states  # should be true for GRUs
         self.softmax_top_k = softmax_top_k
         if embedding is not None:
-            self.word_emb_size = embedding.get_shape()[1]
+            self.emb_size = embedding.get_shape()[1]
         else:
-            self.word_emb_size = 0
+            self.emb_size = 0
 
     @property
     def state_size(self):
         sizes = [cell.state_size for cell in self.cells]
-        if self.word_emb_size:
-            sizes.extend([self.word_emb_size, 1])
+        if self.emb_size:
+            sizes.extend([self.emb_size, 1])
         return tuple(sizes)
 
     @property
@@ -84,7 +84,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             skip = 0
         if self.return_states:
             size += sum(cell.state_size for cell in self.cells[:-skip])
-        if self.word_emb_size:
+        if self.emb_size:
             size += 1  # for the current timestep prediction
         return size
 

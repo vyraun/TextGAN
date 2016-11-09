@@ -15,11 +15,11 @@ flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab
 
 flags.DEFINE_bool   ("char_model",        True,    "Character-level model")
 flags.DEFINE_integer("batch_size",        32,      "Batch size")
-flags.DEFINE_integer("word_emb_size",     50,      "Number of learnable dimensions in word (or "
-                                                   "char) embeddings")  # 224 for words, 50 for
-                                                                        # chars
+flags.DEFINE_integer("word_emb_size",     224,     "Word embedding size")
+flags.DEFINE_integer("char_emb_size",     50,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
-flags.DEFINE_integer("hidden_size",       1024,    "RNN hidden state size")
+flags.DEFINE_integer("word_hidden_size",  224,     "RNN hidden state size for word model")
+flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
 flags.DEFINE_float  ("word_dropout",      0.0,     "Word dropout probability")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
@@ -38,7 +38,10 @@ flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for dis
                                                    "recurrent)")
 flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")
 flags.DEFINE_float  ("sc_decay",          0.25,    "Scheduler importance decay")
-flags.DEFINE_integer("gen_sent_length",   96,      "Maximum length of a generated sentence")
+flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a generated sentence for "
+                                                   "word model")
+flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a generated sentence for "
+                                                   "char model")
 flags.DEFINE_float  ("max_grad_norm",     20.0,    "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, "
@@ -64,3 +67,13 @@ flags.DEFINE_integer("save_every",        -1,      "Save every these many steps 
 flags.DEFINE_bool   ("save_overwrite",    True,    "Overwrite the same file each time")
 flags.DEFINE_integer("validate_every",    1,       "Validate every these many epochs "
                                                    "(0 to disable)")
+
+
+if cfg.char_model:
+    cfg.emb_size = cfg.char_emb_size
+    cfg.hidden_size = cfg.char_hidden_size
+    cfg.gen_sent_length = cfg.char_sent_length
+else:
+    cfg.emb_size = cfg.word_emb_size
+    cfg.hidden_size = cfg.word_hidden_size
+    cfg.gen_sent_length = cfg.word_sent_length

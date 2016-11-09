@@ -40,7 +40,7 @@ class EncoderDecoderModel(object):
             embs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
             # so the rest can be zeros
             embs = tf.concat(1, [embs, tf.zeros([cfg.batch_size, cfg.gen_sent_length - 1,
-                                                 cfg.word_emb_size])])
+                                                 cfg.emb_size])])
             if mle_generator:
                 self.latent = tf.placeholder(tf.float32, [cfg.batch_size,
                                                           cfg.num_layers * cfg.hidden_size],
@@ -98,7 +98,7 @@ class EncoderDecoderModel(object):
         '''Define the word embedding matrix.'''
         with tf.device('/cpu:0') and tf.variable_scope("Embeddings", reuse=self.reuse):
             embedding = tf.get_variable('word_embedding', [len(self.vocab.vocab),
-                                                           cfg.word_emb_size],
+                                                           cfg.emb_size],
                                         initializer=tf.random_uniform_initializer(-1.0, 1.0))
         return embedding
 
