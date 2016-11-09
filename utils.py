@@ -52,7 +52,8 @@ class Scheduler(object):
 
     def update_d(self):
         '''Whether or not to update the descriminator.'''
-        if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
+        if len(self.perps) < self.list_size or (self.max_perp > 0.0 and
+                                                self._current_perp() > self.max_perp):
             return False
         if len(self.d_accs) == 0 or self._current_d_acc() < self.max_d_acc:
             return True
@@ -61,7 +62,8 @@ class Scheduler(object):
 
     def update_g(self):
         '''Whether or not to update the generator.'''
-        if len(self.perps) < self.list_size or self._current_perp() > self.max_perp:
+        if len(self.perps) < self.list_size or (self.max_perp > 0.0 and
+                                                self._current_perp() > self.max_perp):
             return False
         if len(self.d_accs) > 0 and self._current_d_acc() > self.min_d_acc:
             return True
