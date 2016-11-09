@@ -25,26 +25,22 @@ class EncoderDecoderModel(object):
 
         if mle_mode:
             # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
-            self.ldata = tf.placeholder(tf.int32, [cfg.batch_size, None], name='ldata')
-            # right-aligned data: <pad...> <sos> w1 s2 ... w_T
-            self.rdata = tf.placeholder(tf.int32, [cfg.batch_size, None], name='rdata')
+            self.data = tf.placeholder(tf.int32, [cfg.batch_size, None], name='data')
             # sentence lengths
             self.lengths = tf.placeholder(tf.int32, [cfg.batch_size], name='lengths')
             # sentences with word dropout
-            self.ldata_dropped = tf.placeholder(tf.int32, [cfg.batch_size, None],
-                                                name='ldata_dropped')
-            self.rdata_dropped = tf.placeholder(tf.int32, [cfg.batch_size, None],
-                                                name='rdata_dropped')
+            self.data_dropped = tf.placeholder(tf.int32, [cfg.batch_size, None],
+                                               name='data_dropped')
 
-            lembs = self.word_embeddings(self.ldata)
-            rembs_dropped = self.word_embeddings(self.rdata_dropped)
-            self.latent = self.encoder(rembs_dropped)
+            embs = self.word_embeddings(self.data)
+            embs_dropped = self.word_embeddings(self.data_dropped)
+            self.latent = self.encoder(embs_dropped)
         else:
             # only the first timestep input will actually be considered
-            lembs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
+            embs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
             # so the rest can be zeros
-            lembs = tf.concat(1, [lembs, tf.zeros([cfg.batch_size, cfg.gen_sent_length - 1,
-                                                   cfg.word_emb_size])])
+            embs = tf.concat(1, [embs, tf.zeros([cfg.batch_size, cfg.gen_sent_length - 1,
+                                                 cfg.word_emb_size])])
             if mle_generator:
                 self.latent = tf.placeholder(tf.float32, [cfg.batch_size,
                                                           cfg.num_layers * cfg.hidden_size],
@@ -54,8 +50,10 @@ class EncoderDecoderModel(object):
                                                  [cfg.batch_size, cfg.hidden_size],
                                                  name='gan_random_input')
                 self.latent = self.generate_latent(self.rand_input)
-        output, states, self.generated = self.decoder(lembs, self.latent)
+        output, states, self.generated = self.decoder(embs, self.latent)
 
+        if not mle_mode:
+            self.lengths = self.compute_lengths()
         if cfg.d_rnn:
             d_out = self.discriminator_rnn(states)
         else:
@@ -129,10 +127,10 @@ class EncoderDecoderModel(object):
         return tf.nn.tanh(latent)
 
     def encoder(self, inputs):
-        '''Encode sentence and return a latent representation.'''
+        '''Encode sentence and return a latent representation in MLE mode.'''
         with tf.variable_scope("Encoder", reuse=self.mle_reuse):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers), inputs,
-                                         dtype=tf.float32)
+                                         sequence_length=self.lengths, dtype=tf.float32)
             latent = utils.highway(state)
         return latent
 
@@ -142,6 +140,7 @@ class EncoderDecoderModel(object):
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
                                                              return_states=True), inputs,
+                                               sequence_length=self.lengths
                                                dtype=tf.float32)
             else:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
@@ -182,8 +181,16 @@ class EncoderDecoderModel(object):
                                                           [tf.reshape(mask, [-1])])
         return tf.reshape(loss, [cfg.batch_size, -1])
 
+    def compute_lengths(self):
+        eos_locs = tf.where(tf.equal(self.generated, self.vocab.eos_index))
+        counts = tf.unique_with_counts(eos_locs[:, 0])[2]
+        meta_indices = tf.expand_dims(tf.cumsum(counts, exclusive=True), -1)
+        gather_indices = tf.concat(1, [meta_indices, tf.ones_like(meta_indices)])
+        indices = tf.cast(tf.gather_nd(eos_locs, gather_indices), tf.int32)
+        return indices + 1
+
     def discriminator_rnn(self, states):
-        '''Discriminator that operates on the final states of the sentences.'''
+        '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
             # TODO bidirectional RNN if cfg.d_rnn_bidirect is true
             outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
@@ -198,15 +205,8 @@ class EncoderDecoderModel(object):
     def discriminator_finalstate(self, states):
         '''Discriminator that operates on the final states of the sentences.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
-            if self.mle_mode:
-                indices = self.lengths - 2
-            else:
-                eos_locs = tf.where(tf.equal(self.generated, self.vocab.eos_index))
-                counts = tf.unique_with_counts(eos_locs[:, 0])[2]
-                meta_indices = tf.expand_dims(tf.cumsum(counts, exclusive=True), -1)
-                gather_indices = tf.concat(1, [meta_indices, tf.ones_like(meta_indices)])
-                indices = tf.cast(tf.gather_nd(eos_locs, gather_indices), tf.int32)
-            final_states = utils.rowwise_lookup(states, indices)  # 2D array of final states
+            # indices = lengths - 2, since the generated output skips <sos>
+            final_states = utils.rowwise_lookup(states, self.lengths - 2)
             combined = tf.concat(1, [self.latent, final_states])
             lin1 = tf.nn.elu(utils.linear(combined, cfg.hidden_size, True, 0.0,
                                           scope='discriminator_lin1'))

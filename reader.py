@@ -142,19 +142,13 @@ class Reader(object):
         if len(batch) < cfg.batch_size:
             batch.extend([[] for _ in xrange(cfg.batch_size - len(batch))])
         leftalign_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
-        rightalign_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
         leftalign_drop_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
-        rightalign_drop_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
         sent_lengths = np.zeros([cfg.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
-            rightalign_batch[i, -len(s) + 1:] = s[:-1]  # no <eos>
             leftalign_drop_batch[i, :len(s)] = [s[0]] + self._word_dropout(s[1:-1]) + [s[-1]]
-            rightalign_drop_batch[i, -len(s) + 1:] = [
-                s[0]] + self._word_dropout(s[1:-1])  # no <eos>
             sent_lengths[i] = len(s)
-        return (leftalign_batch, rightalign_batch, leftalign_drop_batch, rightalign_drop_batch,
-                sent_lengths)
+        return (leftalign_batch, leftalign_drop_batch, sent_lengths)
 
 
 def main(_):

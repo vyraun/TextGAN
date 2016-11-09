@@ -14,11 +14,9 @@ import utils
 
 def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_only=False):
     '''Use the session to run the model on the batch data.'''
-    f_dict = {model.ldata: batch[0],
-              model.rdata: batch[1],
-              model.ldata_dropped: batch[2],
-              model.rdata_dropped: batch[3],
-              model.lengths: batch[4]}
+    f_dict = {model.data: batch[0],
+              model.data_dropped: batch[1],
+              model.lengths: batch[2]}
     ops = [model.nll, model.mle_cost]
     # training ops are tf.no_op() for a non-training model
     if encoder_only:
@@ -181,7 +179,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 ps_str = 'cps'
             else:
                 ps_str = 'wps'
-            print("%d : %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
+            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
                   "d_acc: %.4f  speed: %.0f %s  %s" %
                   (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
                    shortterm_iters * cfg.batch_size / (time.time() - start_time), ps_str, status))
