@@ -114,6 +114,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     update_g = False
 
     for step, batch in enumerate(batch_loader):
+        update_d = scheduler.update_d()
+        update_g = scheduler.update_g()
         if gen_every > 0 and (step + 1) % gen_every == 0:
             get_latent = True
         else:
@@ -124,16 +126,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
                                get_latent=get_latent)
         nll, mle_cost = ret[:2]
-
-        if cfg.char_model:
-            n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
-                          1)
-        else:
-            n_words = batch[0].shape[1] - 1
-        scheduler.add_perp(np.exp(nll / n_words))
-        update_d = scheduler.update_d()
-        update_g = scheduler.update_g()
-
         if update_d:
             d_cost = ret[2]
         else:
@@ -167,6 +159,13 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             d_acc = np.exp(-gan_cost)
             scheduler.add_d_acc(d_acc)
 
+        if cfg.char_model:
+            n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
+                          1)
+        else:
+            n_words = batch[0].shape[1] - 1
+        scheduler.add_perp(np.exp(nll / n_words))
+
         nlls += nll
         mle_costs += mle_cost
         gan_costs += gan_cost
@@ -187,7 +186,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 avg_gan_cost = -1.0
                 d_acc = 0.0
             print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
-                  "d_acc: %.4f  speed: %.0f wps  D%d G%d" %
+                  "d_acc: %.4f  speed: %.0f wps  D:%d G:%d" %
                   (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
                    shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
 
