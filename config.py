@@ -7,11 +7,11 @@ cfg = flags.FLAGS
 
 
 # command-line config
-flags.DEFINE_string ("data_path",       "data_short",        "Data path")
-flags.DEFINE_string ("save_file",       "models/recent.dat", "Save file")
-flags.DEFINE_string ("load_file",       "",                  "File to load model from")
-flags.DEFINE_string ("word_vocab_file", "data/wvocab.pk",    "Word vocab pickle file")
-flags.DEFINE_string ("char_vocab_file", "data/cvocab.pk",    "Character vocab pickle file")
+flags.DEFINE_string ("data_path",       "data_short",           "Data path")
+flags.DEFINE_string ("save_file",       "models/recent.dat",    "Save file")
+flags.DEFINE_string ("load_file",       "",                     "File to load model from")
+flags.DEFINE_string ("word_vocab_file", "data_short/wvocab.pk", "Word vocab pickle file")
+flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab pickle file")
 
 flags.DEFINE_bool   ("char_model",        True,    "Character-level model")
 flags.DEFINE_integer("batch_size",        32,      "Batch size")

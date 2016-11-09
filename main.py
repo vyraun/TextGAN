@@ -157,10 +157,13 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         shortterm_nlls += nll
         shortterm_mle_costs += mle_cost
         shortterm_gan_costs += gan_cost
-        # batch[1] is the right aligned batch, without <eos>. predictions also have one token less
-        # (no <sos>).
-        iters += batch[1].shape[1]
-        shortterm_iters += batch[1].shape[1]
+        if cfg.char_model:
+            n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
+                          1)
+        else:
+            n_words = batch[0].shape[1] - 1
+        iters += n_words
+        shortterm_iters += n_words
         shortterm_steps += 1
 
         if step % cfg.print_every == 0:
@@ -180,14 +183,10 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if update_g:
                 status.append('G')
             status = ''.join(status)
-            if cfg.char_model:
-                ps_str = 'cps'
-            else:
-                ps_str = 'wps'
             print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
-                  "d_acc: %.4f  speed: %.0f %s  %s" %
+                  "d_acc: %.4f  speed: %.0f wps  %s" %
                   (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
-                   shortterm_iters * cfg.batch_size / (time.time() - start_time), ps_str, status))
+                   shortterm_iters * cfg.batch_size / (time.time() - start_time), status))
 
             update_d = scheduler.update_d()  # TODO do this every time
             update_g = scheduler.update_g()
