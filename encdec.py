@@ -60,7 +60,7 @@ class EncoderDecoderModel(object):
             d_out = self.discriminator_finalstate(states)
         if mle_mode:
             # shift left the input to get the targets
-            targets = tf.concat(1, [self.ldata[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
+            targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
             mle_loss = self.mle_loss(output, targets)
             self.nll = tf.reduce_sum(mle_loss) / cfg.batch_size
             self.mle_cost = self.nll
@@ -140,8 +140,7 @@ class EncoderDecoderModel(object):
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
                                                              return_states=True), inputs,
-                                               sequence_length=self.lengths
-                                               dtype=tf.float32)
+                                               sequence_length=self.lengths, dtype=tf.float32)
             else:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, latent,
                                                              self.embedding, self.softmax_w,
@@ -187,7 +186,7 @@ class EncoderDecoderModel(object):
         meta_indices = tf.expand_dims(tf.cumsum(counts, exclusive=True), -1)
         gather_indices = tf.concat(1, [meta_indices, tf.ones_like(meta_indices)])
         indices = tf.cast(tf.gather_nd(eos_locs, gather_indices), tf.int32)
-        return indices + 1
+        return indices + 2  # +1 for the assumed <sos> in the beginning
 
     def discriminator_rnn(self, states):
         '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
@@ -195,7 +194,7 @@ class EncoderDecoderModel(object):
             # TODO bidirectional RNN if cfg.d_rnn_bidirect is true
             outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
                                                          return_states=True), states,
-                                           dtype=tf.float32)
+                                           sequence_length=self.lengths, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
             d_states = tf.slice(outputs, [0, 0, cfg.hidden_size], [-1, -1, -1])
             # for GRU, we skipped the last layer states because they're the outputs
