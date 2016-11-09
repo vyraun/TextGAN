@@ -54,7 +54,7 @@ flags.DEFINE_float  ("mle_learning_rate", 1e-4,    "Optimizer initial learning r
 flags.DEFINE_float  ("d_learning_rate",   1e-4,    "Optimizer initial learning rate for "
                                                    "discriminator")
 flags.DEFINE_float  ("g_learning_rate",   1e-4,    "Optimizer initial learning rate for generator")
-flags.DEFINE_integer("max_epoch",         50,      "Maximum number of epochs to run for")
+flags.DEFINE_integer("max_epoch",         10000,   "Maximum number of epochs to run for")
 flags.DEFINE_integer("max_steps",         9999999, "Maximum number of steps to run for")
 
 flags.DEFINE_integer("gen_samples",       1,       "Number of demo samples batches to generate "
