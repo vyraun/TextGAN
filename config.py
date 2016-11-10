@@ -27,7 +27,7 @@ flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider 
 flags.DEFINE_bool   ("encoder_after_gan", True,    "Update the encoder after GAN generator update")
 flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
                                                    "than this")
-flags.DEFINE_float  ("max_d_acc",         0.99,   "Update descriminator if accuracy less than "
+flags.DEFINE_float  ("max_d_acc",         0.98,   "Update descriminator if accuracy less than "
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
@@ -35,6 +35,7 @@ flags.DEFINE_integer("sc_list_size",      5,       "Number of previous prints to
                                                    "scheduler")
 flags.DEFINE_float  ("sc_decay",          0.5,     "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
+flags.DEFINE_bool   ("d_energy_based",    False,   "Energy-based discriminator")
 flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for discriminator (if "
                                                    "recurrent)")
 flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")

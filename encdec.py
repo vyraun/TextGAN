@@ -54,18 +54,27 @@ class EncoderDecoderModel(object):
 
         if not mle_mode:
             self.lengths = self.compute_lengths()
-        if cfg.d_rnn:
+        if cfg.d_energy_based:
+            d_out = self.discriminator_energy(states)
+        elif cfg.d_rnn:
             d_out = self.discriminator_rnn(states)
         else:
             d_out = self.discriminator_finalstate(states)
+        if cfg.d_energy_based:
+            # shift left the states to get the targets
+            targets = tf.concat(1, [states[:, 1:, :],
+                                tf.zeros([cfg.batch_size, 1, cfg.hidden_size], tf.int32)])
+            gan_loss = self.gan_energy_loss(d_out, targets)
+        else:
+            gan_loss = self.gan_loss(d_out)
+        self.gan_cost = tf.reduce_sum(gan_loss) / cfg.batch_size
+
         if mle_mode:
             # shift left the input to get the targets
             targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
             mle_loss = self.mle_loss(output, targets)
             self.nll = tf.reduce_sum(mle_loss) / cfg.batch_size
             self.mle_cost = self.nll
-            gan_loss = self.gan_loss(d_out, 1)
-            self.gan_cost = tf.reduce_sum(gan_loss) / cfg.batch_size
             if training:
                 self.mle_train_op = self.train_mle(self.mle_cost)
                 self.mle_encoder_train_op = self.train_mle_encoder(self.mle_cost)
@@ -75,11 +84,9 @@ class EncoderDecoderModel(object):
                 self.mle_encoder_train_op = tf.no_op()
                 self.d_train_op = tf.no_op()
         else:
-            gan_loss = self.gan_loss(d_out, 0)
-            self.gan_cost = tf.reduce_sum(gan_loss) / cfg.batch_size
             if training:
-                self.d_train_op = self.train_d(self.gan_cost)
-                self.g_train_op = self.train_g(-self.gan_cost)
+                self.d_train_op = self.train_d(-self.gan_cost)
+                self.g_train_op = self.train_g(self.gan_cost)
             else:
                 self.d_train_op = tf.no_op()
                 self.g_train_op = tf.no_op()
@@ -250,9 +257,29 @@ class EncoderDecoderModel(object):
             output = utils.linear(lin1, 1, True, 0.0, scope='discriminator_output')
         return output
 
-    def gan_loss(self, d_out, label):
-        '''Return the discriminator loss according to the label. Put no variables here.'''
-        return tf.nn.sigmoid_cross_entropy_with_logits(d_out, tf.constant(label, dtype=tf.float32,
+    def discriminator_energy(self, states):
+        '''An energy-based discriminator that tries to reconstruct the input states.'''
+        with tf.variable_scope("Discriminator", reuse=self.reuse):
+            _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
+                                         sequence_length=self.lengths-1, swap_memory=True,
+                                         dtype=tf.float32)
+            latent = utils.highway(state)
+            output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
+                                           states, sequence_length=self.lengths-2, swap_memory=True,
+                                           dtype=tf.float32)
+            output = tf.reshape(output, [-1, cfg.hidden_size])
+            reconstructed = utils.linear(output, cfg.hidden_size, True, 0.0,
+                                         scope='discriminator_reconst')
+            reconstructed = tf.reshape(reconstructed, [cfg.batch_size, -1, cfg.hidden_size])
+        return reconstructed
+
+    def gan_energy_loss(self, states, targets):
+        '''Return the GAN energy loss. Put no variables here.'''
+        pass  # TODO
+
+    def gan_loss(self, d_out):
+        '''Return the discriminator loss according to the label 1 (real). Put no variables here.'''
+        return tf.nn.sigmoid_cross_entropy_with_logits(d_out, tf.constant(1, dtype=tf.float32,
                                                                           shape=d_out.get_shape()))
 
     def _train(self, cost, scope, optimizer):

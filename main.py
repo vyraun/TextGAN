@@ -107,9 +107,13 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     g_steps = 0
     d_steps = 0
     latest_latent = None
-    update_d = False
-    update_g = False
     encoder_only = False
+    if cfg.d_energy_based:
+        update_d = True
+        update_g = True
+    else:
+        update_d = False
+        update_g = False
 
     for step, batch in enumerate(batch_loader):
         if scheduler is not None:
@@ -155,8 +159,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             gan_cost = 0.0
         else:
             gan_cost = np.mean(costs)
-            d_acc = np.exp(-gan_cost)
             if scheduler is not None:
+                d_acc = np.exp(-gan_cost)
                 scheduler.add_d_acc(d_acc)
 
         if cfg.char_model:
@@ -182,7 +186,10 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
             if shortterm_steps > nogan_steps:
                 avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
-                d_acc = np.exp(-avg_gan_cost)
+                if cfg.d_energy_based:
+                    d_acc = 0.0
+                else:
+                    d_acc = np.exp(-avg_gan_cost)
             else:
                 avg_gan_cost = -1.0
                 d_acc = 0.0
@@ -276,8 +283,11 @@ def main(_):
             lr_tracker.update_mle_lr(cfg.mle_learning_rate)
             lr_tracker.update_g_lr(cfg.g_learning_rate)
             lr_tracker.update_d_lr(cfg.d_learning_rate)
-            scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        cfg.sc_list_size, cfg.sc_decay)
+            if cfg.d_energy_based:
+                scheduler = None
+            else:
+                scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
+                                            cfg.sc_list_size, cfg.sc_decay)
             for i in xrange(cfg.max_epoch):
                 print "\nEpoch: %d" % (i + 1)
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
