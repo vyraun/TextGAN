@@ -91,7 +91,7 @@ def save_model(session, saver, perp, cur_iters):
 
 
 def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader, vocab,
-              saver, steps, max_steps, gen_every=0, lr_tracker=None):
+              saver, steps, max_steps, scheduler, gen_every=0, lr_tracker=None):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -107,15 +107,14 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     g_steps = 0
     d_steps = 0
     latest_latent = None
-    scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                cfg.sc_list_size, cfg.sc_decay)
     update_d = False
     update_g = False
     encoder_only = False
 
     for step, batch in enumerate(batch_loader):
-        update_d = not encoder_only and scheduler.update_d()
-        update_g = not encoder_only and scheduler.update_g()
+        if scheduler is not None:
+            update_d = not encoder_only and scheduler.update_d()
+            update_g = not encoder_only and scheduler.update_g()
         if gen_every > 0 and (step + 1) % gen_every == 0:
             get_latent = True
         else:
@@ -157,14 +156,16 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         else:
             gan_cost = np.mean(costs)
             d_acc = np.exp(-gan_cost)
-            scheduler.add_d_acc(d_acc)
+            if scheduler is not None:
+                scheduler.add_d_acc(d_acc)
 
         if cfg.char_model:
             n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
                           1)
         else:
             n_words = batch[0].shape[1] - 1
-        scheduler.add_perp(np.exp(nll / n_words))
+        if scheduler is not None:
+            scheduler.add_perp(np.exp(nll / n_words))
 
         nlls += nll
         mle_costs += mle_cost
@@ -275,18 +276,20 @@ def main(_):
             lr_tracker.update_mle_lr(cfg.mle_learning_rate)
             lr_tracker.update_g_lr(cfg.g_learning_rate)
             lr_tracker.update_d_lr(cfg.d_learning_rate)
+            scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
+                                        cfg.sc_list_size, cfg.sc_decay)
             for i in xrange(cfg.max_epoch):
                 print "\nEpoch: %d" % (i + 1)
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
                                               reader.training(), vocab, saver, steps,
-                                              cfg.max_steps, gen_every=cfg.gen_every,
+                                              cfg.max_steps, scheduler, gen_every=cfg.gen_every,
                                               lr_tracker=lr_tracker)
                 print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
                 train_perps.append(perplexity)
                 if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
                                               mle_generator, reader.validation(), vocab,
-                                              None, 0, -1, gen_every=-1)
+                                              None, 0, -1, None, gen_every=-1)
                     print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
                     valid_perps.append(perplexity)
                 else:
@@ -298,7 +301,7 @@ def main(_):
         else:
             print '\nTesting'
             perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, mle_generator,
-                                      reader.testing(), vocab, None, 0, cfg.max_steps,
+                                      reader.testing(), vocab, None, 0, cfg.max_steps, None,
                                       gen_every=-1)
             print "Test Perplexity: %.3f" % perplexity
 
