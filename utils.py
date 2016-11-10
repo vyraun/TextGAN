@@ -219,7 +219,7 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None, initializer=None
     dtype = [a.dtype for a in args][0]
 
     if initializer is None:
-        initializer = tf.contrib.layers.xavier_initializer(uniform=False)
+        initializer = tf.contrib.layers.xavier_initializer()
     # Now the computation.
     with tf.variable_scope(scope or "Linear"):
         matrix = tf.get_variable("Matrix", [total_arg_size, output_size], dtype=dtype,

@@ -232,7 +232,7 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("Discriminator", reuse=self.reuse):
             W_conv = tf.get_variable('W_conv', [cfg.d_conv_window, 1, states.get_shape()[2],
                                                 cfg.hidden_size // cfg.d_conv_window],
-                                     initializer=tf.contrib.layers.xavier_initializer())
+                                     initializer=tf.contrib.layers.xavier_initializer_conv2d())
             b_conv = tf.get_variable('b_conv', [cfg.hidden_size // cfg.d_conv_window],
                                      initializer=tf.constant_initializer(0.0))
             states = tf.expand_dims(states, 2)
