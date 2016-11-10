@@ -55,15 +55,14 @@ class EncoderDecoderModel(object):
         if not mle_mode:
             self.lengths = self.compute_lengths()
         if cfg.d_energy_based:
-            d_out = self.discriminator_energy(states)
+            d_out, d_latent = self.discriminator_energy(states)
         elif cfg.d_rnn:
             d_out = self.discriminator_rnn(states)
         else:
             d_out = self.discriminator_finalstate(states)
         if cfg.d_energy_based:
             # shift left the states to get the targets
-            targets = tf.concat(1, [states[:, 1:, :],
-                                tf.zeros([cfg.batch_size, 1, cfg.hidden_size], tf.float32)])
+            targets = tf.concat(1, [states[:, 1:, :], tf.expand_dims(d_latent, 1)])
             gan_loss = self.gan_energy_loss(d_out, targets)
         else:
             gan_loss = self.gan_loss(d_out)
@@ -265,14 +264,16 @@ class EncoderDecoderModel(object):
                                          dtype=tf.float32, scope='discriminator_encoder')
             latent = tf.concat(1, [self.latent, utils.highway(state)])
             latent = utils.linear(latent, cfg.hidden_size, True, 0.0, scope='discriminator_latent')
+            ret_latent = utils.linear(tf.nn.elu(latent), cfg.hidden_size, True, 0.0,
+                                      scope='discriminator_ret_latent')
             output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
-                                          states, sequence_length=self.lengths-2, swap_memory=True,
+                                          states, sequence_length=self.lengths-1, swap_memory=True,
                                           dtype=tf.float32, scope='discriminator_decoder')
             output = tf.reshape(output, [-1, cfg.hidden_size])
             reconstructed = utils.linear(output, cfg.hidden_size, True, 0.0,
                                          scope='discriminator_reconst')
             reconstructed = tf.reshape(reconstructed, [cfg.batch_size, -1, cfg.hidden_size])
-        return reconstructed
+        return reconstructed, ret_latent
 
     def gan_energy_loss(self, states, targets):
         '''Return the GAN energy loss. Put no variables here.'''
@@ -280,12 +281,10 @@ class EncoderDecoderModel(object):
         for _ in xrange(cfg.batch_size):
             ranges.append(tf.expand_dims(tf.range(tf.shape(states)[1]), 0))
         ranges = tf.concat(0, ranges)
-        lengths = tf.expand_dims(self.lengths - 2, -1)
+        lengths = tf.expand_dims(self.lengths - 1, -1)
         mask = tf.cast(tf.less(ranges, lengths), tf.float32)
         losses = tf.reduce_sum(tf.square(states - targets), [2])
-        # FIXME loss would be 0 for a 0-length sentence (<sos><eos>), encouraging the model to
-        #       produce degenerate sentences
-        return (losses * mask) / tf.cast(tf.maximum(lengths, 1), tf.float32)
+        return (losses * mask) / tf.cast(lengths, tf.float32)
 
     def gan_loss(self, d_out):
         '''Return the discriminator loss according to the label 1 (real). Put no variables here.'''
