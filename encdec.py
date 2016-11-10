@@ -233,6 +233,9 @@ class EncoderDecoderModel(object):
             conv_out = tf.reshape(conv, [cfg.batch_size, -1, cfg.hidden_size // cfg.d_conv_window])
             conv_out = tf.nn.elu(tf.nn.bias_add(conv_out, b_conv))
             reduced = tf.reduce_mean(conv_out, [1])
+            lin_latent = tf.nn.elu(utils.linear(self.latent, cfg.hidden_size // cfg.d_conv_window,
+                                                True, 0.0, scope='lin_latent'))
+            reduced = tf.concat(1, [lin_latent, reduced])
             output = utils.linear(reduced, 1, True, 0.0, scope='discriminator_output')
         return output
 
