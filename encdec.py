@@ -283,7 +283,9 @@ class EncoderDecoderModel(object):
         lengths = tf.expand_dims(self.lengths - 2, -1)
         mask = tf.cast(tf.less(ranges, lengths), tf.float32)
         losses = tf.reduce_sum(tf.square(states - targets), [2])
-        return (losses * mask) / tf.cast(lengths, tf.float32)
+        # FIXME loss would be 0 for a 0-length sentence (<sos><eos>), encouraging the model to
+        #       produce degenerate sentences
+        return (losses * mask) / tf.cast(tf.maximum(lengths, 1), tf.float32)
 
     def gan_loss(self, d_out):
         '''Return the discriminator loss according to the label 1 (real). Put no variables here.'''
