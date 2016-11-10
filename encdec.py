@@ -84,8 +84,8 @@ class EncoderDecoderModel(object):
                 self.d_train_op = tf.no_op()
         else:
             if training:
-                self.d_train_op = self.train_d(-self.gan_cost)
-                self.g_train_op = self.train_g(self.gan_cost)
+                self.d_train_op = self.train_d(self.gan_cost)
+                self.g_train_op = self.train_g(-self.gan_cost)
             else:
                 self.d_train_op = tf.no_op()
                 self.g_train_op = tf.no_op()
@@ -284,11 +284,15 @@ class EncoderDecoderModel(object):
         lengths = tf.expand_dims(self.lengths - 1, -1)
         mask = tf.cast(tf.less(ranges, lengths), tf.float32)
         losses = tf.reduce_sum(tf.square(states - targets), [2])
+        if not self.mle_mode:
+            losses *= -1.0
         return (losses * mask) / tf.cast(lengths, tf.float32)
 
     def gan_loss(self, d_out):
-        '''Return the discriminator loss according to the label 1 (real). Put no variables here.'''
-        return tf.nn.sigmoid_cross_entropy_with_logits(d_out, tf.constant(1, dtype=tf.float32,
+        '''Return the discriminator loss according to the label (1 if MLE mode).
+           Put no variables here.'''
+        return tf.nn.sigmoid_cross_entropy_with_logits(d_out, tf.constant(int(self.mle_mode),
+                                                                          dtype=tf.float32,
                                                                           shape=d_out.get_shape()))
 
     def _train(self, cost, scope, optimizer):
