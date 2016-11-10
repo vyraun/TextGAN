@@ -63,7 +63,7 @@ class EncoderDecoderModel(object):
         if cfg.d_energy_based:
             # shift left the states to get the targets
             targets = tf.concat(1, [states[:, 1:, :],
-                                tf.zeros([cfg.batch_size, 1, cfg.hidden_size], tf.int32)])
+                                tf.zeros([cfg.batch_size, 1, cfg.hidden_size], tf.float32)])
             gan_loss = self.gan_energy_loss(d_out, targets)
         else:
             gan_loss = self.gan_loss(d_out)
@@ -262,11 +262,12 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("Discriminator", reuse=self.reuse):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
                                          sequence_length=self.lengths-1, swap_memory=True,
-                                         dtype=tf.float32)
-            latent = utils.highway(state)
+                                         dtype=tf.float32, scope='discriminator_encoder')
+            latent = tf.concat(1, [self.latent, utils.highway(state)])
+            latent = utils.linear(latent, cfg.hidden_size, True, 0.0, scope='discriminator_latent')
             output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
-                                           states, sequence_length=self.lengths-2, swap_memory=True,
-                                           dtype=tf.float32)
+                                          states, sequence_length=self.lengths-2, swap_memory=True,
+                                          dtype=tf.float32, scope='discriminator_decoder')
             output = tf.reshape(output, [-1, cfg.hidden_size])
             reconstructed = utils.linear(output, cfg.hidden_size, True, 0.0,
                                          scope='discriminator_reconst')
@@ -275,7 +276,13 @@ class EncoderDecoderModel(object):
 
     def gan_energy_loss(self, states, targets):
         '''Return the GAN energy loss. Put no variables here.'''
-        pass  # TODO
+        ranges = []
+        for _ in xrange(cfg.batch_size):
+            ranges.append(tf.expand_dims(tf.range(tf.shape(states)[1]), 0))
+        ranges = tf.concat(0, ranges)
+        mask = tf.cast(tf.less(ranges, tf.expand_dims(self.lengths - 2, -1)), tf.float32)
+        losses = tf.reduce_sum(tf.square(states - targets), [2])
+        return losses * mask
 
     def gan_loss(self, d_out):
         '''Return the discriminator loss according to the label 1 (real). Put no variables here.'''
