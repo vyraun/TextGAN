@@ -149,8 +149,11 @@ def read_words(line, chars):
                     yield ' '
                 else:
                     first = False
-                for c in word:
-                    yield c
+                if word == '<unk>':
+                    yield word
+                else:
+                    for c in word:
+                        yield c
             else:
                 yield word
 

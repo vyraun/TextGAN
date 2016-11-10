@@ -280,9 +280,10 @@ class EncoderDecoderModel(object):
         for _ in xrange(cfg.batch_size):
             ranges.append(tf.expand_dims(tf.range(tf.shape(states)[1]), 0))
         ranges = tf.concat(0, ranges)
-        mask = tf.cast(tf.less(ranges, tf.expand_dims(self.lengths - 2, -1)), tf.float32)
+        lengths = tf.expand_dims(self.lengths - 2, -1)
+        mask = tf.cast(tf.less(ranges, lengths), tf.float32)
         losses = tf.reduce_sum(tf.square(states - targets), [2])
-        return losses * mask
+        return (losses * mask) / tf.cast(lengths, tf.float32)
 
     def gan_loss(self, d_out):
         '''Return the discriminator loss according to the label 1 (real). Put no variables here.'''
