@@ -269,7 +269,7 @@ class EncoderDecoderModel(object):
 
     def train_mle_encoder(self, cost):
         '''Encoder-only training op for MLE mode.'''
-        return self._train(cost, '.*/Encoder', self.g_optimizer)
+        return self._train(cost, '.*/(Embeddings|Encoder)', self.g_optimizer)
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''
