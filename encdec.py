@@ -42,12 +42,11 @@ class EncoderDecoderModel(object):
             embs = tf.concat(1, [embs, tf.zeros([cfg.batch_size, cfg.gen_sent_length - 1,
                                                  cfg.emb_size])])
             if mle_generator:
-                self.latent = tf.placeholder(tf.float32, [cfg.batch_size,
-                                                          cfg.num_layers * cfg.hidden_size],
+                self.latent = tf.placeholder(tf.float32, [cfg.batch_size, cfg.latent_size],
                                              name='mle_generator_input')
             else:
                 self.rand_input = tf.placeholder(tf.float32,
-                                                 [cfg.batch_size, cfg.hidden_size],
+                                                 [cfg.batch_size, cfg.latent_size],
                                                  name='gan_random_input')
                 self.latent = self.generate_latent(self.rand_input)
         output, states, self.generated = self.decoder(embs, self.latent)
@@ -63,10 +62,13 @@ class EncoderDecoderModel(object):
         if cfg.d_energy_based:
             # shift left the states to get the targets
             targets = tf.concat(1, [states[:, 1:, :], tf.expand_dims(d_latent, 1)])
-            gan_loss = self.gan_energy_loss(d_out, targets)
+            d_loss, g_loss = self.gan_energy_loss(d_out, targets)
+            self.d_cost = tf.reduce_sum(d_loss) / cfg.batch_size
+            self.g_cost = tf.reduce_sum(g_loss) / cfg.batch_size
         else:
             gan_loss = self.gan_loss(d_out)
-        self.gan_cost = tf.reduce_sum(gan_loss) / cfg.batch_size
+            self.d_cost = tf.reduce_sum(gan_loss) / cfg.batch_size
+            self.g_cost = -self.d_cost
 
         if mle_mode:
             # shift left the input to get the targets
@@ -77,15 +79,15 @@ class EncoderDecoderModel(object):
             if training:
                 self.mle_train_op = self.train_mle(self.mle_cost)
                 self.mle_encoder_train_op = self.train_mle_encoder(self.mle_cost)
-                self.d_train_op = self.train_d(self.gan_cost)
+                self.d_train_op = self.train_d(self.d_cost)
             else:
                 self.mle_train_op = tf.no_op()
                 self.mle_encoder_train_op = tf.no_op()
                 self.d_train_op = tf.no_op()
         else:
             if training:
-                self.d_train_op = self.train_d(self.gan_cost)
-                self.g_train_op = self.train_g(-self.gan_cost)
+                self.d_train_op = self.train_d(self.d_cost)
+                self.g_train_op = self.train_g(self.g_cost)
             else:
                 self.d_train_op = tf.no_op()
                 self.g_train_op = tf.no_op()
@@ -129,9 +131,8 @@ class EncoderDecoderModel(object):
            representation distribution.'''
         with tf.variable_scope("Transform_Latent", reuse=self.gan_reuse):
             rand_input = utils.highway(rand_input, layer_size=1)
-            latent = utils.linear(rand_input, cfg.num_layers * cfg.hidden_size,
-                                  True)
-        return tf.nn.tanh(latent)
+            latent = utils.linear(rand_input, cfg.latent_size, True)
+        return tf.nn.elu(latent)
 
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation in MLE mode.'''
@@ -139,8 +140,9 @@ class EncoderDecoderModel(object):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size), inputs,
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32)
-            latent = utils.highway(state)
-        return latent
+            latent = utils.highway(state)  # TODO make the encoder a BiRNN+convnet
+            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
+        return tf.nn.elu(latent)
 
     def decoder(self, inputs, latent):
         '''Use the latent representation and word inputs to predict next words.'''
@@ -262,9 +264,10 @@ class EncoderDecoderModel(object):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32, scope='discriminator_encoder')
+            # TODO use BiRNN+convnet for the encoder
             latent = tf.concat(1, [self.latent, utils.highway(state)])
-            latent = utils.linear(latent, cfg.hidden_size, True, 0.0, scope='discriminator_latent')
-            ret_latent = utils.linear(tf.nn.elu(latent), cfg.hidden_size, True, 0.0,
+            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='discriminator_latent')
+            ret_latent = utils.linear(tf.nn.elu(latent), cfg.latent_size, True, 0.0,
                                       scope='discriminator_ret_latent')
             output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
                                           states, sequence_length=self.lengths-1, swap_memory=True,
@@ -285,8 +288,12 @@ class EncoderDecoderModel(object):
         mask = tf.cast(tf.less(ranges, lengths), tf.float32)
         losses = tf.reduce_sum(tf.square(states - targets), [2])
         if not self.mle_mode:
-            losses *= -1.0
-        return (losses * mask) / tf.cast(lengths, tf.float32)
+            d_losses = cfg.d_eb_margin - losses
+        # d_loss is max(0, m - loss) to prevent the manifold moving away from a far-away generation,
+        # but g_loss still has to give a signal to the generator to move towards the manifold
+        return tf.maximum(0.0, tf.reduce_sum(d_losses * mask, [1]) / tf.cast(lengths,
+                                                                             tf.float32)), \
+               tf.reduce_sum(losses * mask, [1]) / tf.cast(lengths, tf.float32)
 
     def gan_loss(self, d_out):
         '''Return the discriminator loss according to the label (1 if MLE mode).

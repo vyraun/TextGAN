@@ -24,7 +24,7 @@ def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_o
     else:
         train_ops = [model.mle_train_op]
     if use_gan:
-        ops.append(model.gan_cost)
+        ops.extend([model.d_cost, model.g_cost])
         train_ops.append(model.d_train_op)
     if get_latent:
         ops.append(model.latent)
@@ -40,7 +40,7 @@ def get_random_sample(random_dims):
 def call_gan_session(session, model, random_dims, generator=False):
     '''Use the session to train the generator of the GAN with fake samples.'''
     f_dict = {model.rand_input: get_random_sample(random_dims)}
-    ops = [model.gan_cost]
+    ops = [model.d_cost, model.g_cost]
     # train_ops will be tf.no_op() for a non-training model
     if generator:
         ops.append(model.g_train_op)
@@ -96,14 +96,17 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     start_time = time.time()
     nlls = 0.0
     mle_costs = 0.0
-    gan_costs = 0.0
+    d_costs = 0.0
+    g_costs = 0.0
     iters = 0
     shortterm_nlls = 0.0
     shortterm_mle_costs = 0.0
-    shortterm_gan_costs = 0.0
+    shortterm_d_costs = 0.0
+    shortterm_g_costs = 0.0
     shortterm_iters = 0
     shortterm_steps = 0
-    nogan_steps = 0
+    nod_steps = 0
+    nog_steps = 0
     g_steps = 0
     d_steps = 0
     latest_latent = None
@@ -133,35 +136,43 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             encoder_only = False
         if update_d:
             d_cost = ret[2]
+            g_cost = ret[3]
         else:
-            d_cost = -1.0
+            d_cost = g_cost = -1.0
         if get_latent:
             latest_latent = ret[-1]
         if update_d:
             d_steps += 1
-            r_cost = call_gan_session(session, gan_model,
-                                      [cfg.batch_size, cfg.hidden_size])[0]
+            d1_cost, g1_cost = call_gan_session(session, gan_model,
+                                                [cfg.batch_size, cfg.latent_size])[0]
         else:
-            r_cost = -1.0
+            d1_cost = g1_cost = -1.0
         if update_g:
             g_steps += 1
             if lr_tracker is not None:
                 lr_tracker.gan_mode()
-            g_cost = call_gan_session(session, gan_model,
-                                      [cfg.batch_size, cfg.hidden_size], generator=True)[0]
+            d2_cost, g2_cost = call_gan_session(session, gan_model,
+                                                [cfg.batch_size, cfg.latent_size],
+                                                generator=True)[0]
             if cfg.encoder_after_gan:
                 encoder_only = True
         else:
-            g_cost = -1.0
-        costs = [c for c in [d_cost, r_cost, g_cost] if c > 0.0]
-        if not costs:
-            nogan_steps += 1
-            gan_cost = 0.0
+            d2_cost = g2_cost = -1.0
+        d_costs = [c for c in [d_cost, d1_cost, d2_cost] if c > 0.0]
+        g_costs = [c for c in [g_cost, g1_cost, g2_cost] if c > 0.0]
+        if not d_costs:
+            nod_steps += 1
+            d_cost = 0.0
         else:
-            gan_cost = np.mean(costs)
+            d_cost = np.mean(d_costs)
             if scheduler is not None:
-                d_acc = np.exp(-gan_cost)
+                d_acc = np.exp(-d_cost)
                 scheduler.add_d_acc(d_acc)
+        if not g_costs:
+            nog_steps += 1
+            g_cost = 0.0
+        else:
+            g_cost = np.mean(g_costs)
 
         if cfg.char_model:
             n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
@@ -173,10 +184,12 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
         nlls += nll
         mle_costs += mle_cost
-        gan_costs += gan_cost
+        d_costs += d_cost
+        g_costs += g_cost
         shortterm_nlls += nll
         shortterm_mle_costs += mle_cost
-        shortterm_gan_costs += gan_cost
+        shortterm_d_costs += d_cost
+        shortterm_g_costs += g_cost
         iters += n_words
         shortterm_iters += n_words
         shortterm_steps += 1
@@ -184,26 +197,34 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if step % cfg.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
-            if shortterm_steps > nogan_steps:
-                avg_gan_cost = shortterm_gan_costs / (shortterm_steps - nogan_steps)
+            if shortterm_steps > nod_steps:
+                avg_d_cost = shortterm_d_costs / (shortterm_steps - nod_steps)
                 if cfg.d_energy_based:
                     d_acc = 0.0
                 else:
-                    d_acc = np.exp(-avg_gan_cost)
+                    d_acc = np.exp(-avg_d_cost)
             else:
-                avg_gan_cost = -1.0
+                avg_d_cost = -1.0
                 d_acc = 0.0
-            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  gan_cost: %.4f  "
-                  "d_acc: %.4f  speed: %.0f wps  D:%d G:%d" %
-                  (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_gan_cost, d_acc,
-                   shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
+            if shortterm_steps > nog_steps:
+                avg_g_cost = shortterm_g_costs / (shortterm_steps - nog_steps)
+            else:
+                avg_g_cost = -1.0
+
+            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  d_cost: %.4f  "
+                  "g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  D:%d G:%d" %
+                  (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_d_cost, avg_g_cost,
+                   d_acc, shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps,
+                   g_steps))
 
             shortterm_nlls = 0.0
             shortterm_mle_costs = 0.0
-            shortterm_gan_costs = 0.0
+            shortterm_d_costs = 0.0
+            shortterm_g_costs = 0.0
             shortterm_iters = 0
             shortterm_steps = 0
-            nogan_steps = 0
+            nod_steps = 0
+            nog_steps = 0
             g_steps = 0
             d_steps = 0
             start_time = time.time()
@@ -212,7 +233,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if latest_latent is not None:
                 generate_sentences(session, mle_generator, latest_latent, vocab, True, batch[0])
             for _ in xrange(cfg.gen_samples):
-                generate_sentences(session, gan_model, [cfg.batch_size, cfg.hidden_size],
+                generate_sentences(session, gan_model, [cfg.batch_size, cfg.latent_size],
                                    vocab)
 
         cur_iters = steps + step
@@ -225,7 +246,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
     if gen_every < 0:
         for _ in xrange(cfg.gen_samples):
-            generate_sentences(session, gan_model, [cfg.batch_size, cfg.hidden_size], vocab)
+            generate_sentences(session, gan_model, [cfg.batch_size, cfg.latent_size], vocab)
 
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
