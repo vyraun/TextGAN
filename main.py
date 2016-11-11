@@ -24,7 +24,7 @@ def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_o
     else:
         train_ops = [model.mle_train_op]
     if use_gan:
-        ops.extend([model.d_cost, model.g_cost])
+        ops.append(model.d_cost)
         train_ops.append(model.d_train_op)
     if get_latent:
         ops.append(model.latent)
@@ -134,9 +134,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             encoder_only = False
         if update_d:
             d_cost = ret[2]
-            g_cost = ret[3]
         else:
-            d_cost = g_cost = -1.0
+            d_cost = None
         if get_latent:
             latest_latent = ret[-1]
         if update_d:
@@ -144,7 +143,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             d1_cost, g1_cost = call_gan_session(session, gan_model,
                                                 [cfg.batch_size, cfg.latent_size])
         else:
-            d1_cost = g1_cost = -1.0
+            d1_cost = g1_cost = None
         if update_g:
             g_steps += 1
             if lr_tracker is not None:
@@ -155,9 +154,9 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if cfg.encoder_after_gan:
                 encoder_only = True
         else:
-            d2_cost = g2_cost = -1.0
-        d_costs = [c for c in [d_cost, d1_cost, d2_cost] if c > 0.0]
-        g_costs = [c for c in [g_cost, g1_cost, g2_cost] if c > 0.0]
+            d2_cost = g2_cost = None
+        d_costs = [c for c in [d_cost, d1_cost, d2_cost] if c is not None]
+        g_costs = [c for c in [g1_cost, g2_cost] if c is not None]
         if not d_costs:
             nod_steps += 1
             d_cost = 0.0

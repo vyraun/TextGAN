@@ -191,7 +191,7 @@ def rowwise_lookup(params, indices):
     return tf.gather(flattened, flattened_indices)
 
 
-def linear(args, output_size, bias, bias_start=0.0, scope=None, initializer=None):
+def linear(args, output_size, bias, bias_start=0.0, scope=None, train=True, initializer=None):
     """Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
     Args:
         args: a 2D Tensor or a list of 2D, batch x n, Tensors.
@@ -226,7 +226,7 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None, initializer=None
     # Now the computation.
     with tf.variable_scope(scope or "Linear"):
         matrix = tf.get_variable("Matrix", [total_arg_size, output_size], dtype=dtype,
-                                 initializer=initializer)
+                                 initializer=initializer, trainable=train)
         if len(args) == 1:
             res = tf.matmul(args[0], matrix)
         else:
@@ -234,7 +234,8 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None, initializer=None
         if not bias:
             return res
         bias_term = tf.get_variable("Bias", [output_size], dtype=dtype,
-                                    initializer=tf.constant_initializer(bias_start, dtype=dtype))
+                                    initializer=tf.constant_initializer(bias_start, dtype=dtype),
+                                    trainable=train)
     return res + bias_term
 
 

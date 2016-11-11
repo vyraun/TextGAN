@@ -61,7 +61,7 @@ class EncoderDecoderModel(object):
             d_out = self.discriminator_finalstate(states)
         if cfg.d_energy_based:
             # shift left the states to get the targets
-            targets = tf.concat(1, [states[:, 1:, :], tf.expand_dims(d_latent, 1)])
+            targets = tf.concat(1, [states, tf.expand_dims(d_latent, 1)])
             d_loss, g_loss = self.gan_energy_loss(d_out, targets)
             self.d_cost = tf.reduce_sum(d_loss) / cfg.batch_size
             self.g_cost = tf.reduce_sum(g_loss) / cfg.batch_size
@@ -265,17 +265,22 @@ class EncoderDecoderModel(object):
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32, scope='discriminator_encoder')
             # TODO use BiRNN+convnet for the encoder
-            latent = tf.concat(1, [self.latent, utils.highway(state)])
-            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='discriminator_latent')
-            ret_latent = utils.linear(tf.nn.elu(latent), cfg.hidden_size, True, 0.0,
-                                      scope='discriminator_ret_latent')
+            # this latent is of size cfg.hidden_size since it needs a lot more capacity than
+            # cfg.latent_size to reproduce the hidden states
+            latent = utils.highway(state)
+            decoder_input = tf.concat(1, [tf.zeros([cfg.batch_size, 1, cfg.hidden_size]), states])
             output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
-                                          states, sequence_length=self.lengths-1, swap_memory=True,
-                                          dtype=tf.float32, scope='discriminator_decoder')
+                                          decoder_input, sequence_length=self.lengths,
+                                          swap_memory=True, dtype=tf.float32,
+                                          scope='discriminator_decoder')
             output = tf.reshape(output, [-1, cfg.hidden_size])
             reconstructed = utils.linear(output, cfg.hidden_size, True, 0.0,
                                          scope='discriminator_reconst')
             reconstructed = tf.reshape(reconstructed, [cfg.batch_size, -1, cfg.hidden_size])
+            # don't train this projection, since the model can learn to zero out ret_latent to
+            # minimize the reconstruction error
+            ret_latent = tf.nn.tanh(utils.linear(self.latent, cfg.hidden_size, False,
+                                                 scope='discriminator_ret_latent', train=False))
         return reconstructed, ret_latent
 
     def gan_energy_loss(self, states, targets):
@@ -284,19 +289,20 @@ class EncoderDecoderModel(object):
         for _ in xrange(cfg.batch_size):
             ranges.append(tf.expand_dims(tf.range(tf.shape(states)[1]), 0))
         ranges = tf.concat(0, ranges)
-        lengths = tf.expand_dims(self.lengths - 1, -1)
+        lengths = tf.expand_dims(self.lengths, -1)
         mask = tf.cast(tf.less(ranges, lengths), tf.float32)
-        losses = tf.reduce_sum(tf.square(states - targets), [2])
+        losses = tf.reduce_sum(tf.reduce_sum(tf.square(states - targets), [2]) * mask,
+                               [1]) / tf.cast(lengths, tf.float32)
         if self.mle_mode:
             d_losses = losses
+            g_losses = 0.0  # not useful in MLE mode
         else:
-            d_losses = cfg.d_eb_margin - losses
-        # d_loss is max(0, m - loss) to prevent the manifold moving away from a far-away generation,
-        # but g_loss still has to give a signal to the generator to move towards the manifold.
-        # g_loss is not used in MLE mode.
-        return tf.maximum(0.0, tf.reduce_sum(d_losses * mask, [1]) / tf.cast(lengths,
-                                                                             tf.float32)), \
-               tf.reduce_sum(losses * mask, [1]) / tf.cast(lengths, tf.float32)
+            # d_losses is max(0, m - loss) to prevent the manifold moving away from a far-away
+            # generation, but g_losses still has to give a signal to the generator to move towards
+            # the manifold.
+            d_losses = tf.nn.relu(cfg.d_eb_margin - losses)
+            g_losses = losses
+        return d_losses, g_losses
 
     def gan_loss(self, d_out):
         '''Return the discriminator loss according to the label (1 if MLE mode).
