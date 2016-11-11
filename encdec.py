@@ -267,7 +267,7 @@ class EncoderDecoderModel(object):
             # TODO use BiRNN+convnet for the encoder
             latent = tf.concat(1, [self.latent, utils.highway(state)])
             latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='discriminator_latent')
-            ret_latent = utils.linear(tf.nn.elu(latent), cfg.latent_size, True, 0.0,
+            ret_latent = utils.linear(tf.nn.elu(latent), cfg.hidden_size, True, 0.0,
                                       scope='discriminator_ret_latent')
             output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
                                           states, sequence_length=self.lengths-1, swap_memory=True,
@@ -287,10 +287,13 @@ class EncoderDecoderModel(object):
         lengths = tf.expand_dims(self.lengths - 1, -1)
         mask = tf.cast(tf.less(ranges, lengths), tf.float32)
         losses = tf.reduce_sum(tf.square(states - targets), [2])
-        if not self.mle_mode:
+        if self.mle_mode:
+            d_losses = losses
+        else:
             d_losses = cfg.d_eb_margin - losses
         # d_loss is max(0, m - loss) to prevent the manifold moving away from a far-away generation,
-        # but g_loss still has to give a signal to the generator to move towards the manifold
+        # but g_loss still has to give a signal to the generator to move towards the manifold.
+        # g_loss is not used in MLE mode.
         return tf.maximum(0.0, tf.reduce_sum(d_losses * mask, [1]) / tf.cast(lengths,
                                                                              tf.float32)), \
                tf.reduce_sum(losses * mask, [1]) / tf.cast(lengths, tf.float32)

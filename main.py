@@ -96,8 +96,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     start_time = time.time()
     nlls = 0.0
     mle_costs = 0.0
-    d_costs = 0.0
-    g_costs = 0.0
     iters = 0
     shortterm_nlls = 0.0
     shortterm_mle_costs = 0.0
@@ -144,7 +142,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if update_d:
             d_steps += 1
             d1_cost, g1_cost = call_gan_session(session, gan_model,
-                                                [cfg.batch_size, cfg.latent_size])[0]
+                                                [cfg.batch_size, cfg.latent_size])
         else:
             d1_cost = g1_cost = -1.0
         if update_g:
@@ -153,7 +151,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 lr_tracker.gan_mode()
             d2_cost, g2_cost = call_gan_session(session, gan_model,
                                                 [cfg.batch_size, cfg.latent_size],
-                                                generator=True)[0]
+                                                generator=True)
             if cfg.encoder_after_gan:
                 encoder_only = True
         else:
@@ -184,8 +182,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
         nlls += nll
         mle_costs += mle_cost
-        d_costs += d_cost
-        g_costs += g_cost
         shortterm_nlls += nll
         shortterm_mle_costs += mle_cost
         shortterm_d_costs += d_cost
