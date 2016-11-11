@@ -125,8 +125,16 @@ class Reader(object):
 
     def _word_dropout(self, sent):
         ret = []
+        if cfg.char_model:
+            space = self.vocab.vocab_lookup[' ']
+            keep = 1  # the number of characters to skip for dropout consideration
         for word in sent:
-            if random.random() < cfg.word_dropout:
+            if cfg.char_model:
+                if word == space:
+                    keep = 2  # don't drop space and the first character of the next word
+                else:
+                    keep -= 1
+            if keep <= 0 and random.random() < cfg.word_dropout:
                 ret.append(self.vocab.unk_index)
             else:
                 ret.append(word)

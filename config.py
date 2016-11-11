@@ -13,7 +13,7 @@ flags.DEFINE_string ("load_file",       "",                     "File to load mo
 flags.DEFINE_string ("word_vocab_file", "data_short/wvocab.pk", "Word vocab pickle file")
 flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab pickle file")
 
-flags.DEFINE_bool   ("char_model",        True,    "Character-level model")
+flags.DEFINE_bool   ("char_model",        False,   "Character-level model")
 flags.DEFINE_integer("batch_size",        32,      "Batch size")
 flags.DEFINE_integer("word_emb_size",     256,     "Word embedding size")
 flags.DEFINE_integer("char_emb_size",     50,      "Character embedding size")
@@ -21,7 +21,7 @@ flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
 flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
 flags.DEFINE_integer("latent_size",       32,      "Latent representation size")
-flags.DEFINE_float  ("word_dropout",      0.5,     "Word dropout probability for decoder inputs")
+flags.DEFINE_float  ("word_dropout",      0.7,     "Word dropout probability for decoder inputs")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
                                                    "timestep during generation (-1 for all)")
@@ -36,7 +36,7 @@ flags.DEFINE_integer("sc_list_size",      5,       "Number of previous prints to
                                                    "scheduler")
 flags.DEFINE_float  ("sc_decay",          0.5,     "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
-flags.DEFINE_bool   ("d_energy_based",    False,   "Energy-based discriminator")
+flags.DEFINE_bool   ("d_energy_based",    True,    "Energy-based discriminator")
 flags.DEFINE_float  ("d_word_eb_margin",  512.0,   "Margin for energy-based discriminator for word "
                                                    "model")
 flags.DEFINE_float  ("d_char_eb_margin",  1024.0,  "Margin for energy-based discriminator for char "
