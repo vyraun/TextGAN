@@ -34,13 +34,15 @@ class EncoderDecoderModel(object):
 
             embs = self.word_embeddings(self.data)
             embs_dropped = self.word_embeddings(self.data_dropped)
-            self.latent = self.encoder(embs_dropped[:, 1:, :])
+            self.latent = self.encoder(embs[:, 1:, :])
         else:
             # only the first timestep input will actually be considered
-            embs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
+            embs_dropped = self.word_embeddings(tf.constant(vocab.sos_index,
+                                                            shape=[cfg.batch_size, 1]))
             # so the rest can be zeros
-            embs = tf.concat(1, [embs, tf.zeros([cfg.batch_size, cfg.gen_sent_length - 1,
-                                                 cfg.emb_size])])
+            embs_dropped = tf.concat(1, [embs_dropped, tf.zeros([cfg.batch_size,
+                                                                 cfg.gen_sent_length - 1,
+                                                                 cfg.emb_size])])
             if mle_generator:
                 self.latent = tf.placeholder(tf.float32, [cfg.batch_size, cfg.latent_size],
                                              name='mle_generator_input')
@@ -49,7 +51,7 @@ class EncoderDecoderModel(object):
                                                  [cfg.batch_size, cfg.latent_size],
                                                  name='gan_random_input')
                 self.latent = self.generate_latent(self.rand_input)
-        output, states, self.generated = self.decoder(embs, self.latent)
+        output, states, self.generated = self.decoder(embs_dropped, self.latent)
 
         if not mle_mode:
             self.lengths = self.compute_lengths()
@@ -129,7 +131,10 @@ class EncoderDecoderModel(object):
     def generate_latent(self, rand_input):
         '''Transform a sample from the normal distribution to a sample from the latent
            representation distribution.'''
+        # XXX this is prone to overfitting to some mode of the distribution.
+        #     consider adding a KL divergence term to the MLE cost?
         with tf.variable_scope("Transform_Latent", reuse=self.gan_reuse):
+            # TODO make this optional. see if we can drive encoder output to a gaussian.
             rand_input = utils.highway(rand_input, layer_size=1)
             latent = utils.linear(rand_input, cfg.latent_size, True)
         return tf.nn.elu(latent)
@@ -140,7 +145,8 @@ class EncoderDecoderModel(object):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size), inputs,
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32)
-            latent = utils.highway(state)  # TODO make the encoder a BiRNN+convnet
+            # TODO make the encoder a BiRNN+convnet
+            latent = utils.highway(state)
             latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
         return tf.nn.elu(latent)
 
