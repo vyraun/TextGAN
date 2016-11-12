@@ -32,21 +32,15 @@ def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_o
     return session.run(ops, f_dict)[:-len(train_ops)]
 
 
-def get_random_sample(random_dims):
-    '''Generate a random latent representation to generate text from.'''
-    return np.random.normal(size=random_dims)
-
-
-def call_gan_session(session, model, random_dims, generator=False):
+def call_gan_session(session, model, generator=False):
     '''Use the session to train the generator of the GAN with fake samples.'''
-    f_dict = {model.rand_input: get_random_sample(random_dims)}
     ops = [model.d_cost, model.g_cost]
     # train_ops will be tf.no_op() for a non-training model
     if generator:
         ops.append(model.g_train_op)
     else:
         ops.append(model.d_train_op)
-    return session.run(ops, f_dict)[:-1]
+    return session.run(ops)[:-1]
 
 
 def display_sentences(output, vocab):
@@ -65,7 +59,8 @@ def display_sentences(output, vocab):
     print
 
 
-def generate_sentences(session, model, random_dims, vocab, mle_generator=False, true_output=None):
+def generate_sentences(session, model, vocab, random_dims=None, mle_generator=False,
+                       true_output=None):
     '''Generate sentences using the generator, either novel or from known encodings (mle_generator).
     '''
     if mle_generator:
@@ -75,7 +70,7 @@ def generate_sentences(session, model, random_dims, vocab, mle_generator=False, 
         f_dict = {model.latent: random_dims}
     else:
         print '\nNovel sentences: new batch'
-        f_dict = {model.rand_input: get_random_sample(random_dims)}
+        f_dict = {}
     output = session.run(model.generated, f_dict)
     display_sentences(output, vocab)
 
@@ -140,17 +135,14 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             latest_latent = ret[-1]
         if update_d:
             d_steps += 1
-            d1_cost, g1_cost = call_gan_session(session, gan_model,
-                                                [cfg.batch_size, cfg.latent_size])
+            d1_cost, g1_cost = call_gan_session(session, gan_model)
         else:
             d1_cost = g1_cost = None
         if update_g:
             g_steps += 1
             if lr_tracker is not None:
                 lr_tracker.gan_mode()
-            d2_cost, g2_cost = call_gan_session(session, gan_model,
-                                                [cfg.batch_size, cfg.latent_size],
-                                                generator=True)
+            d2_cost, g2_cost = call_gan_session(session, gan_model, generator=True)
             if cfg.encoder_after_gan:
                 encoder_only = True
         else:
@@ -229,10 +221,9 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
         if gen_every > 0 and (step + 1) % gen_every == 0:
             if latest_latent is not None:
-                generate_sentences(session, mle_generator, latest_latent, vocab, True, batch[0])
+                generate_sentences(session, mle_generator, vocab, latest_latent, True, batch[0])
             for _ in xrange(cfg.gen_samples):
-                generate_sentences(session, gan_model, [cfg.batch_size, cfg.latent_size],
-                                   vocab)
+                generate_sentences(session, gan_model, vocab)
 
         cur_iters = steps + step
         if saver is not None and cur_iters and cfg.save_every > 0 and \
@@ -244,7 +235,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
     if gen_every < 0:
         for _ in xrange(cfg.gen_samples):
-            generate_sentences(session, gan_model, [cfg.batch_size, cfg.latent_size], vocab)
+            generate_sentences(session, gan_model, vocab)
 
     perp = np.exp(nlls / iters)
     cur_iters = steps + step

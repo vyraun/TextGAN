@@ -47,9 +47,8 @@ class EncoderDecoderModel(object):
                 self.latent = tf.placeholder(tf.float32, [cfg.batch_size, cfg.latent_size],
                                              name='mle_generator_input')
             else:
-                self.rand_input = tf.placeholder(tf.float32,
-                                                 [cfg.batch_size, cfg.latent_size],
-                                                 name='gan_random_input')
+                self.rand_input = tf.random_normal([cfg.batch_size, cfg.latent_size],
+                                                   name='gan_random_input')
                 self.latent = self.generate_latent(self.rand_input)
         output, states, self.generated = self.decoder(embs_dropped, self.latent)
 
