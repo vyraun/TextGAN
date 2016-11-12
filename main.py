@@ -1,4 +1,6 @@
+from __future__ import absolute_import
 from __future__ import division
+from __future__ import print_function
 
 import sys
 import time
@@ -46,16 +48,16 @@ def call_gan_session(session, model, generator=False):
 def display_sentences(output, vocab):
     '''Display sentences from indices.'''
     for i, sent in enumerate(output):
-        print 'Sentence %d:' % i,
+        print('Sentence %d:' % i, end=' ')
         words = []
         for word in sent:
             if word == vocab.eos_index:
                 break
             words.append(vocab.vocab[word])
         if cfg.char_model:
-            print ''.join(words)
+            print(''.join(words))
         else:
-            print ' '.join(words)
+            print(' '.join(words))
     print
 
 
@@ -64,12 +66,12 @@ def generate_sentences(session, model, vocab, random_dims=None, mle_generator=Fa
     '''Generate sentences using the generator, either novel or from known encodings (mle_generator).
     '''
     if mle_generator:
-        print '\nTrue output'
+        print('\nTrue output')
         display_sentences(true_output[:, 1:], vocab)
-        print 'Sentences generated from true encodings'
+        print('Sentences generated from true encodings')
         f_dict = {model.latent: random_dims}
     else:
-        print '\nNovel sentences: new batch'
+        print('\nNovel sentences: new batch')
         f_dict = {}
     output = session.run(model.generated, f_dict)
     display_sentences(output, vocab)
@@ -80,9 +82,9 @@ def save_model(session, saver, perp, cur_iters):
     save_file = cfg.save_file
     if not cfg.save_overwrite:
         save_file = save_file + '.' + str(cur_iters)
-    print "Saving model (epoch perplexity: %.3f) ..." % perp
+    print("Saving model (epoch perplexity: %.3f) ..." % perp)
     save_file = saver.save(session, save_file)
-    print "Saved to", save_file
+    print("Saved to", save_file)
 
 
 def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader, vocab,
@@ -277,13 +279,13 @@ def main(_):
         try:
             # try to restore a saved model file
             saver.restore(session, cfg.load_file)
-            print "Model restored from", cfg.load_file
+            print("Model restored from", cfg.load_file)
         except ValueError:
             if cfg.training:
                 tf.initialize_all_variables().run()
-                print "No loadable model file, new model initialized."
+                print("No loadable model file, new model initialized.")
             else:
-                print "You need to provide a valid model file for testing!"
+                print("You need to provide a valid model file for testing!")
                 sys.exit(1)
 
         if cfg.training:
@@ -296,31 +298,31 @@ def main(_):
             scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
                                         cfg.sc_list_size, cfg.sc_decay)
             for i in xrange(cfg.max_epoch):
-                print "\nEpoch: %d" % (i + 1)
+                print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
                                               reader.training(), vocab, saver, steps,
                                               cfg.max_steps, scheduler, gen_every=cfg.gen_every,
                                               lr_tracker=lr_tracker)
-                print "Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity)
+                print("Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity))
                 train_perps.append(perplexity)
                 if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
                                               mle_generator, reader.validation(), vocab,
                                               None, 0, -1, None, gen_every=-1)
-                    print "Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity)
+                    print("Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity))
                     valid_perps.append(perplexity)
                 else:
                     valid_perps.append(None)
-                print 'Train:', train_perps
-                print 'Valid:', valid_perps
+                print('Train:', train_perps)
+                print('Valid:', valid_perps)
                 if steps >= cfg.max_steps:
                     break
         else:
-            print '\nTesting'
+            print('\nTesting')
             perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, mle_generator,
                                       reader.testing(), vocab, None, 0, cfg.max_steps, None,
                                       gen_every=-1)
-            print "Test Perplexity: %.3f" % perplexity
+            print("Test Perplexity: %.3f" % perplexity)
 
 
 if __name__ == "__main__":

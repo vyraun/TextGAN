@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import tensorflow as tf
 
 import utils
@@ -121,9 +125,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             for i, cell in enumerate(self.cells):
                 with tf.variable_scope("Layer%d" % i):
                     if not tf.nn.nest.is_sequence(state):
-                        raise ValueError(
-                            "Expected state to be a tuple of length %d, but received: %s"
-                                       % (len(self.state_size), state))
+                        raise ValueError("Expected state to be a tuple of length %d, but received: "
+                                         "%s" % (len(self.state_size), state))
                     cur_state = state[i]
                     cur_inp, new_state = cell(cur_inp, cur_state)
                     new_states.append(new_state)

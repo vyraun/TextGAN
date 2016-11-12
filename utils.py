@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import itertools
 import re
 
@@ -93,21 +97,21 @@ class LearningRateTracker(object):
 
     def update_mle_lr(self, value):
         if self.mle_lr_value != value:
-            print 'Changing MLE learning rate to', value
+            print('Changing MLE learning rate to', value)
             if self.g_mle:
                 self._set_g_lr(value)
             self.mle_lr_value = value
 
     def update_g_lr(self, value):
         if self.g_lr_value != value:
-            print 'Changing generator learning rate to', value
+            print('Changing generator learning rate to', value)
             if not self.g_mle:
                 self._set_g_lr(value)
             self.g_lr_value = value
 
     def update_d_lr(self, value):
         if self.d_lr_value != value:
-            print 'Changing discriminator learning rate to', value
+            print('Changing discriminator learning rate to', value)
             self._set_d_lr(value)
             self.d_lr_value = value
 

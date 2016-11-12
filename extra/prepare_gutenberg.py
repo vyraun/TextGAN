@@ -1,12 +1,12 @@
+from __future__ import absolute_import
 from __future__ import division
+from __future__ import print_function
 
 import codecs
-import collections
 import glob
 from os.path import join as pjoin
 import random
 import re
-import sys
 import unicodedata
 
 import nltk
@@ -62,29 +62,29 @@ def create_file(fname, lines, vocab):
 
 
 def summarize(output, vocab):
-    print
-    print 'Size of corpus:', vocab.N()
-    print 'Total vocab size:', vocab.B()
+    print()
+    print('Size of corpus:', vocab.N())
+    print('Total vocab size:', vocab.B())
 
     N = len(output)
     test_N = int(test_split * N)
     val_N = int(val_split * N)
     train_N = N - test_N - val_N
-    print 'Number of lines:', N
-    print '   Train:', train_N
-    print '   Val:  ', val_N
-    print '   Test: ', test_N
-    print
+    print('Number of lines:', N)
+    print('   Train:', train_N)
+    print('   Val:  ', val_N)
+    print('   Test: ', test_N)
+    print()
     return train_N, val_N, test_N
 
 
 if __name__ == '__main__':
     output = []
     vocab = nltk.FreqDist()
-    print 'Reading...'
+    print('Reading...')
     fnames = sorted(glob.glob(pjoin(input_dir, '*.txt')))
     for i, fname in enumerate(fnames):
-        print '(%d/%d) %s' % (i, len(fnames), fname)
+        print('(%d/%d) %s' % (i, len(fnames), fname))
         with codecs.open(fname, 'r', 'latin-1') as f:
             paragraph = []
             for l in f:
@@ -106,7 +106,7 @@ if __name__ == '__main__':
         if count / vocab.N() >= data_coverage:
             top_words = set(w for w, c in vocab.most_common(vocab_size + 1))
             break
-    print 'Final vocab size:', len(top_words)
+    print('Final vocab size:', len(top_words))
 
     random.shuffle(output)
     create_file('train.txt', output[:train_N], top_words)

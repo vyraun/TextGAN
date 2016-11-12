@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import tensorflow as tf
 
 from config import cfg
@@ -170,7 +174,7 @@ class EncoderDecoderModel(object):
                                                     [-1, cfg.gen_sent_length - 1, 1]),
                                            tf.int32), [-1])
                 generated = tf.stop_gradient(tf.concat(1, [words, tf.constant(self.vocab.eos_index,
-                                                               shape=[cfg.batch_size, 1])]))
+                                                                       shape=[cfg.batch_size, 1])]))
                 skip = 1
             states = tf.slice(outputs, [0, 0, cfg.hidden_size + skip], [-1, -1, -1])
             # for GRU, we skipped the last layer states because they're the outputs

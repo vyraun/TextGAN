@@ -1,11 +1,12 @@
+from __future__ import absolute_import
 from __future__ import division
+from __future__ import print_function
 
 import cPickle as pickle
 import glob
 from os.path import join as pjoin
 import random
 
-import nltk
 import numpy as np
 import tensorflow as tf
 
@@ -27,11 +28,11 @@ class Vocab(object):
     def load_by_parsing(self, save=False, verbose=True):
         '''Read the vocab from the dataset'''
         if verbose:
-            print 'Loading vocabulary by parsing...'
+            print('Loading vocabulary by parsing...')
         fnames = glob.glob(pjoin(cfg.data_path, '*.txt'))
         for fname in fnames:
             if verbose:
-                print fname
+                print(fname)
             with open(fname, 'r') as f:
                 for line in f:
                     for word in utils.read_words(line, chars=cfg.char_model):
@@ -39,7 +40,7 @@ class Vocab(object):
                             self.vocab_lookup[word] = len(self.vocab)
                             self.vocab.append(word)
         if verbose:
-            print 'Vocabulary loaded, size:', len(self.vocab)
+            print('Vocabulary loaded, size:', len(self.vocab))
 
     def load_from_pickle(self, verbose=True):
         '''Read the vocab from a pickled file'''
@@ -49,19 +50,19 @@ class Vocab(object):
             pkfile = cfg.word_vocab_file
         try:
             if verbose:
-                print 'Loading vocabulary from pickle...'
+                print('Loading vocabulary from pickle...')
             with open(pkfile, 'rb') as f:
                 self.vocab, self.vocab_lookup = pickle.load(f)
             if verbose:
-                print 'Vocabulary loaded, size:', len(self.vocab)
+                print('Vocabulary loaded, size:', len(self.vocab))
         except IOError:
             if verbose:
-                print 'Error loading from pickle, attempting parsing.'
+                print('Error loading from pickle, attempting parsing.')
             self.load_by_parsing(save=True, verbose=verbose)
             with open(pkfile, 'wb') as f:
                 pickle.dump([self.vocab, self.vocab_lookup], f, -1)
                 if verbose:
-                    print 'Saved pickle file.'
+                    print('Saved pickle file.')
 
     def lookup(self, words):
         return [self.sos_index] + [self.vocab_lookup.get(w) for w in words] + [self.eos_index]
@@ -166,11 +167,11 @@ def main(_):
     reader = Reader(vocab)
     for batch in reader.training():
         for line in batch[0]:
-            print line
+            print(line)
             for e in line:
-                print vocab.vocab[e],
-            print
-            print
+                print(vocab.vocab[e], end=' ')
+            print()
+            print()
 
 
 if __name__ == '__main__':
