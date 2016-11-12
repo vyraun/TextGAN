@@ -49,8 +49,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
 
     """RNN cell composed sequentially of multiple simple cells."""
 
-    def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None, return_states=False,
-                 outputs_are_states=True, softmax_top_k=-1):
+    def __init__(self, cells, word_dropout=0.0, unk_index=0, embedding=None, softmax_w=None,
+                 softmax_b=None, return_states=False, outputs_are_states=True, softmax_top_k=-1):
         """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
            None, the output of the previous timestep is used for the current time step using the
            softmax variables.
@@ -58,6 +58,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         if not cells:
             raise ValueError("Must specify at least one cell for MultiRNNCell.")
         self.cells = cells
+        self.word_dropout = word_dropout
+        self.unk_index = unk_index
         if not (embedding is None and softmax_w is None and softmax_b is None) and \
            not (embedding is not None and softmax_w is not None and softmax_b is not None):
             raise ValueError('Embedding and softmax variables have to all be None or all not None.')
@@ -135,7 +137,12 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                                                   name='Softmax_transform'),
                                         self.softmax_b)
                 prediction = tf.argmax(logits, 1)
-                new_states.append(self.expected_embedding(logits, prediction))
+                unknowns = tf.constant(self.unk_index, shape=prediction.get_shape(), dtype=tf.int64)
+                rand = tf.random_uniform(prediction.get_shape(), minval=0, maxval=1)
+                # prediction_dropped only works (and makes sense) if softmax_top_k = 1
+                prediction_dropped = tf.select(tf.less(rand, self.word_dropout), unknowns,
+                                               prediction)
+                new_states.append(self.expected_embedding(logits, prediction_dropped))
                 new_states.append(tf.ones([inputs.get_shape()[0], 1]))  # we have valid prev input
         if self.return_states:
             output = [cur_inp]

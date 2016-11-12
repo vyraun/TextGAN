@@ -104,8 +104,9 @@ class EncoderDecoderModel(object):
         if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
             softmax_top_k = -1
         return rnncell.MultiRNNCell([rnncell.GRUCell(hidden_size, latent=latent)
-                                     for _ in xrange(num_layers)],
-                                    embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b,
+                                     for _ in xrange(num_layers)], word_dropout=cfg.word_dropout,
+                                    unk_index=self.vocab.unk_index, embedding=embedding,
+                                    softmax_w=softmax_w, softmax_b=softmax_b,
                                     return_states=return_states, softmax_top_k=softmax_top_k)
 
     def word_embedding_matrix(self):
@@ -155,6 +156,8 @@ class EncoderDecoderModel(object):
     def decoder(self, inputs, latent):
         '''Use the latent representation and word inputs to predict next words.'''
         with tf.variable_scope("Decoder", reuse=self.reuse):
+            latent = utils.highway(latent, layer_size=1)
+            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size,
                                                              latent, return_states=True), inputs,
