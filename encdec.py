@@ -186,7 +186,13 @@ class EncoderDecoderModel(object):
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
-        mask = tf.cast(tf.greater(targets, 0, name='targets_mask'), tf.float32)
+        present_mask = tf.greater(targets, 0, name='present_mask')
+        if cfg.word_dropout > 0.99:
+            # don't enfoce loss on true <unk>'s
+            unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
+            mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
+        else:
+            mask = tf.cast(present_mask, tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, cfg.hidden_size])
         if self.training and cfg.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])

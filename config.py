@@ -23,7 +23,7 @@ flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
 flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
 flags.DEFINE_integer("latent_size",       32,      "Latent representation size")
-flags.DEFINE_float  ("word_dropout",      0.66,    "Word (or char) dropout probability for decoder "
+flags.DEFINE_float  ("word_dropout",      1.0,     "Word (or char) dropout probability for decoder "
                                                    "inputs")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
