@@ -132,12 +132,11 @@ class EncoderDecoderModel(object):
         '''Transform a sample from the normal distribution to a sample from the latent
            representation distribution.'''
         # XXX this is prone to overfitting to some mode of the distribution.
-        #     consider adding a KL divergence term to the MLE cost?
+        #     remove this entirely for an objective that brings encoder outputs to the prior.
         with tf.variable_scope("Transform_Latent", reuse=self.gan_reuse):
-            # TODO make this optional. see if we can drive encoder output to a gaussian.
-            rand_input = utils.highway(rand_input, layer_size=1)
+            rand_input = utils.highway(rand_input, layer_size=2)
             latent = utils.linear(rand_input, cfg.latent_size, True)
-        return tf.nn.elu(latent)
+        return latent
 
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation in MLE mode.'''
@@ -145,10 +144,10 @@ class EncoderDecoderModel(object):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size), inputs,
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32)
-            # TODO make the encoder a BiRNN+convnet
-            latent = utils.highway(state)
+            # TODO make the encoder a BiRNN+convnet (try VAE first)
+            latent = utils.highway(state, layer_size=2)
             latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
-        return tf.nn.elu(latent)
+        return latent
 
     def decoder(self, inputs, latent):
         '''Use the latent representation and word inputs to predict next words.'''
@@ -270,10 +269,12 @@ class EncoderDecoderModel(object):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32, scope='discriminator_encoder')
-            # TODO use BiRNN+convnet for the encoder
+            # TODO use BiRNN+convnet for the encoder (try VAE first)
             # this latent is of size cfg.hidden_size since it needs a lot more capacity than
             # cfg.latent_size to reproduce the hidden states
-            latent = utils.highway(state)
+            latent = utils.highway(state, layer_size=1)
+            latent = utils.linear(latent, cfg.hidden_size, True,
+                                  scope='discriminator_latent_transform')
             decoder_input = tf.concat(1, [tf.zeros([cfg.batch_size, 1, cfg.hidden_size]), states])
             output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
                                           decoder_input, sequence_length=self.lengths,

@@ -163,7 +163,10 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         else:
             d_cost = np.mean(d_costs)
             if scheduler is not None:
-                d_acc = np.exp(-d_cost)
+                if cfg.d_energy_based:
+                    d_acc = -1.0
+                else:
+                    d_acc = np.exp(-d_cost)
                 scheduler.add_d_acc(d_acc)
         if not g_costs:
             nog_steps += 1
@@ -195,12 +198,12 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if shortterm_steps > nod_steps:
                 avg_d_cost = shortterm_d_costs / (shortterm_steps - nod_steps)
                 if cfg.d_energy_based:
-                    d_acc = 0.0
+                    d_acc = -1.0
                 else:
                     d_acc = np.exp(-avg_d_cost)
             else:
                 avg_d_cost = -1.0
-                d_acc = 0.0
+                d_acc = -1.0
             if shortterm_steps > nog_steps:
                 avg_g_cost = shortterm_g_costs / (shortterm_steps - nog_steps)
             else:
@@ -299,11 +302,8 @@ def main(_):
             lr_tracker.update_mle_lr(cfg.mle_learning_rate)
             lr_tracker.update_g_lr(cfg.g_learning_rate)
             lr_tracker.update_d_lr(cfg.d_learning_rate)
-            if cfg.d_energy_based:
-                scheduler = None
-            else:
-                scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                            cfg.sc_list_size, cfg.sc_decay)
+            scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
+                                        cfg.sc_list_size, cfg.sc_decay)
             for i in xrange(cfg.max_epoch):
                 print "\nEpoch: %d" % (i + 1)
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,

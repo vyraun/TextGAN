@@ -128,6 +128,8 @@ class Reader(object):
         if cfg.char_model:
             space = self.vocab.vocab_lookup[' ']
             keep = 1  # the number of characters to skip for dropout consideration
+        else:
+            keep = 0
         for word in sent:
             if cfg.char_model:
                 if word == space:

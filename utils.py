@@ -65,7 +65,8 @@ class Scheduler(object):
         if len(self.perps) < self.list_size or (self.max_perp > 0.0 and
                                                 self._current_perp() > self.max_perp):
             return False
-        if len(self.d_accs) > 0 and self._current_d_acc() > self.min_d_acc:
+        d_acc = self._current_d_acc()
+        if len(self.d_accs) > 0 and (d_acc < 0.0 or d_acc > self.min_d_acc):
             return True
         else:
             return False

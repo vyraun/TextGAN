@@ -21,7 +21,8 @@ flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
 flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
 flags.DEFINE_integer("latent_size",       32,      "Latent representation size")
-flags.DEFINE_float  ("word_dropout",      0.7,     "Word dropout probability for decoder inputs")
+flags.DEFINE_float  ("word_dropout",      0.66,    "Word (or char) dropout probability for decoder "
+                                                   "inputs")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
                                                    "timestep during generation (-1 for all)")
@@ -30,7 +31,7 @@ flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descrimi
                                                    "than this")
 flags.DEFINE_float  ("max_d_acc",         0.98,    "Update descriminator if accuracy less than "
                                                    "this")
-flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
+flags.DEFINE_float  ("max_perplexity",    100.0,   "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
 flags.DEFINE_integer("sc_list_size",      5,       "Number of previous prints to look at in "
                                                    "scheduler")
