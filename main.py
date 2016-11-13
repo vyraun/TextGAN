@@ -177,6 +177,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             n_words = batch[0].shape[1] - 1
         if scheduler is not None:
             scheduler.add_perp(np.exp(nll / n_words))
+            scheduler.add_kld(kld)
 
         nlls += nll
         klds += kld
@@ -304,7 +305,7 @@ def main(_):
             lr_tracker.update_g_lr(cfg.g_learning_rate)
             lr_tracker.update_d_lr(cfg.d_learning_rate)
             scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        cfg.sc_list_size, cfg.sc_decay)
+                                        cfg.max_kld, cfg.sc_list_size, cfg.sc_decay)
             for i in xrange(cfg.max_epoch):
                 print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,

@@ -10,17 +10,19 @@ import numpy as np
 import tensorflow as tf
 
 
-class Scheduler(object):  # TODO start using GAN only when the KL divergence is low enough
+class Scheduler(object):
 
     '''Scheduler for GANs'''
 
-    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay):
+    def __init__(self, min_d_acc, max_d_acc, max_perp, max_kld, list_size, decay):
         self.min_d_acc = min_d_acc
         self.max_d_acc = max_d_acc
         self.max_perp = max_perp
+        self.max_kld = max_kld
         self.list_size = list_size
         self.d_accs = []
         self.perps = []
+        self.klds = []
         coeffs = [1.0]
         for _ in xrange(list_size - 1):
             coeffs.append(coeffs[-1] * decay)
@@ -38,6 +40,12 @@ class Scheduler(object):  # TODO start using GAN only when the KL divergence is 
         if len(self.perps) > self.list_size:
             self.perps.pop()
 
+    def add_kld(self, kld):
+        '''Observe new KL divergence.'''
+        self.klds.insert(0, kld)
+        if len(self.klds) > self.list_size:
+            self.klds.pop()
+
     def _current_perp(self):
         '''Smooth approximation of current perplexity.'''
         coeffs = self.coeffs.copy(order='K')
@@ -45,6 +53,14 @@ class Scheduler(object):  # TODO start using GAN only when the KL divergence is 
             coeffs = coeffs[:len(self.perps)]
             coeffs /= np.sum(coeffs)
         return np.sum(np.array(self.perps) * coeffs)
+
+    def _current_kld(self):
+        '''Smooth approximation of current KL divergence.'''
+        coeffs = self.coeffs.copy(order='K')
+        if len(self.klds) < self.list_size:
+            coeffs = coeffs[:len(self.klds)]
+            coeffs /= np.sum(coeffs)
+        return np.sum(np.array(self.klds) * coeffs)
 
     def _current_d_acc(self):
         '''Smooth approximation of current descriminator accuracy.'''
@@ -56,8 +72,9 @@ class Scheduler(object):  # TODO start using GAN only when the KL divergence is 
 
     def update_d(self):
         '''Whether or not to update the descriminator.'''
-        if len(self.perps) < self.list_size or (self.max_perp > 0.0 and
-                                                self._current_perp() > self.max_perp):
+        if len(self.perps) < self.list_size or \
+               (self.max_perp > 0.0 and self._current_perp() > self.max_perp) or \
+               (self.max_kld > 0.0 and self._current_kld() > self.max_kld):
             return False
         if len(self.d_accs) == 0 or self._current_d_acc() < self.max_d_acc:
             return True
@@ -66,8 +83,9 @@ class Scheduler(object):  # TODO start using GAN only when the KL divergence is 
 
     def update_g(self):
         '''Whether or not to update the generator.'''
-        if len(self.perps) < self.list_size or (self.max_perp > 0.0 and
-                                                self._current_perp() > self.max_perp):
+        if len(self.perps) < self.list_size or \
+               (self.max_perp > 0.0 and self._current_perp() > self.max_perp) or \
+               (self.max_kld > 0.0 and self._current_kld() > self.max_kld):
             return False
         d_acc = self._current_d_acc()
         if len(self.d_accs) > 0 and (d_acc < 0.0 or d_acc > self.min_d_acc):
