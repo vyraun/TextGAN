@@ -35,8 +35,8 @@ flags.DEFINE_float  ("max_d_acc",         0.98,    "Update descriminator if accu
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    50.0,    "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
-flags.DEFINE_float  ("max_kld",           10.0,    "Scheduler expects KL divergence to be under "
-                                                   "this (-1 to disable)")
+flags.DEFINE_float  ("min_kld_weight",    0.999,   "Scheduler expects KL divergence weight to be "
+                                                   "over this (-1 to disable)")
 flags.DEFINE_integer("sc_list_size",      5,       "Number of previous prints to look at in "
                                                    "scheduler")
 flags.DEFINE_float  ("sc_decay",          0.5,     "Scheduler importance decay")
@@ -56,10 +56,8 @@ flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a generate
 flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a generated sentence for "
                                                    "char model")
 flags.DEFINE_float  ("max_grad_norm",     20.0,    "Gradient clipping")
-flags.DEFINE_integer("anneal_bias",       3500,    "The step to reach 0.5 for KL divergence weight "
+flags.DEFINE_integer("anneal_halfpoint",  3500,    "The step to reach 0.5 for KL divergence weight "
                                                    "annealing")
-flags.DEFINE_integer("anneal_scale",      3500,    "Steps from 0.5 to flatten for KL divergence "
-                                                   "weight annealing")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, "
                                                    "adadelta)")

@@ -19,7 +19,7 @@ def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_o
     f_dict = {model.data: batch[0],
               model.data_dropped: batch[1],
               model.lengths: batch[2]}
-    ops = [model.nll, model.kld, model.mle_cost]
+    ops = [model.nll, model.kld, model.mle_cost, model.kld_weight]
     # training ops are tf.no_op() for a non-training model
     if encoder_only:
         train_ops = [model.mle_encoder_train_op]
@@ -128,11 +128,11 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             lr_tracker.mle_mode()
         ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
                                encoder_only=encoder_only, get_latent=get_latent)
-        nll, kld, mle_cost = ret[:3]
+        nll, kld, mle_cost, kld_weight = ret[:4]
         if encoder_only:
             encoder_only = False
         if update_d:
-            d_cost = ret[2]
+            d_cost = ret[4]
         else:
             d_cost = None
         if get_latent:
@@ -177,7 +177,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             n_words = batch[0].shape[1] - 1
         if scheduler is not None:
             scheduler.add_perp(np.exp(nll / n_words))
-            scheduler.add_kld(kld)
+            scheduler.add_kld_weight(kld_weight)
 
         nlls += nll
         klds += kld
@@ -208,8 +208,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 avg_g_cost = shortterm_g_costs / (shortterm_steps - nog_steps)
             else:
                 avg_g_cost = -1.0
-
-            kld_weight = session.run(mle_model.kld_weight)
             print("%d: %d  perplexity: %.3f  mle_loss: %.4f  kld_loss: %.4f  mle_cost: %.4f  "
                   "kld_weight: %.4f  d_cost: %.4f  g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  "
                   "D:%d G:%d" %
@@ -305,7 +303,7 @@ def main(_):
             lr_tracker.update_g_lr(cfg.g_learning_rate)
             lr_tracker.update_d_lr(cfg.d_learning_rate)
             scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        cfg.max_kld, cfg.sc_list_size, cfg.sc_decay)
+                                        cfg.min_kld_weight, cfg.sc_list_size, cfg.sc_decay)
             for i in xrange(cfg.max_epoch):
                 print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,

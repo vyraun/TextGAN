@@ -86,8 +86,8 @@ class EncoderDecoderModel(object):
             targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
             self.nll = tf.reduce_sum(self.mle_loss(output, targets)) / cfg.batch_size
             self.kld = tf.reduce_sum(self.kld_loss(z_mean, z_logvar)) / cfg.batch_size
-            self.kld_weight = tf.sigmoid((7 / cfg.anneal_scale)
-                                         * (self.global_step - cfg.anneal_bias))
+            self.kld_weight = tf.sigmoid((7 / cfg.anneal_halfpoint)
+                                         * (self.global_step - cfg.anneal_halfpoint))
             self.mle_cost = self.nll + (self.kld_weight * self.kld)
             if training:
                 self.mle_train_op = self.train_mle(self.mle_cost)
