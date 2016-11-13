@@ -1,11 +1,6 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import itertools
 import re
 
-import nltk
 import numpy as np
 import tensorflow as tf
 
@@ -24,7 +19,7 @@ class Scheduler(object):
         self.perps = []
         self.kld_weight = 0.0
         coeffs = [1.0]
-        for _ in xrange(list_size - 1):
+        for _ in range(list_size - 1):
             coeffs.append(coeffs[-1] * decay)
         self.coeffs = np.array(coeffs) / sum(coeffs)
 
@@ -154,12 +149,9 @@ def fix_word(word):
 def read_words(line, chars):
     if chars:
         first = True
-    # workaround to get the NLTK tokenization deal with <unk> nicely
-    for raw_word in nltk.word_tokenize(line.replace('<unk>', '-unk-')):
-        if raw_word == '-unk-':
-            word = '<unk>'
-        else:
-            word = fix_word(raw_word)
+    for word in line.split():
+        if word != '<unk>':
+            word = fix_word(word)
         if word:
             if chars:
                 if not first:
@@ -180,7 +172,7 @@ def grouper(n, iterable, fillvalue=None):
        >>> [e for e in grouper(3, [1,2,3,4,5,6,7])]
        [(1, 2, 3), (4, 5, 6), (7, None, None)]'''
     args = [iter(iterable)] * n
-    return itertools.izip_longest(*args, fillvalue=fillvalue)
+    return itertools.zip_longest(*args, fillvalue=fillvalue)
 
 
 def get_optimizer(lr, name):
@@ -267,7 +259,7 @@ def highway(input_, layer_size=1, bias=-2, f=tf.nn.tanh):
     if len(shape) != 2:
         raise ValueError("Highway is expecting 2D arguments: %s" % str(shape))
     size = shape[1]
-    for idx in xrange(layer_size):
+    for idx in range(layer_size):
         output = f(linear(input_, size, False, scope='Highway_Nonlin_%d' % idx))
         transform_gate = tf.sigmoid(linear(input_, size, False, scope='Highway_Gate_%d' % idx)
                                     + bias)

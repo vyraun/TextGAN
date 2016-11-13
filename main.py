@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import sys
 import time
 
@@ -231,7 +227,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
         if gen_every > 0 and (step + 1) % gen_every == 0:
             if latest_latent is not None:
                 generate_sentences(session, mle_generator, vocab, latest_latent, True, batch[0])
-            for _ in xrange(cfg.gen_samples):
+            for _ in range(cfg.gen_samples):
                 generate_sentences(session, gan_model, vocab)
 
         cur_iters = steps + step
@@ -243,7 +239,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             break
 
     if gen_every < 0:
-        for _ in xrange(cfg.gen_samples):
+        for _ in range(cfg.gen_samples):
             generate_sentences(session, gan_model, vocab)
 
     perp = np.exp(nlls / iters)
@@ -304,7 +300,7 @@ def main(_):
             lr_tracker.update_d_lr(cfg.d_learning_rate)
             scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
                                         cfg.min_kld_weight, cfg.sc_list_size, cfg.sc_decay)
-            for i in xrange(cfg.max_epoch):
+            for i in range(cfg.max_epoch):
                 print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
                                               reader.training(), vocab, saver, steps,

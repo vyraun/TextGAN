@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import tensorflow as tf
 
 from config import cfg
@@ -112,7 +108,7 @@ class EncoderDecoderModel(object):
         if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
             softmax_top_k = -1
         return rnncell.MultiRNNCell([rnncell.GRUCell(hidden_size, latent=latent)
-                                     for _ in xrange(num_layers)], word_dropout=cfg.word_dropout,
+                                     for _ in range(num_layers)], word_dropout=cfg.word_dropout,
                                     unk_index=self.vocab.unk_index, embedding=embedding,
                                     softmax_w=softmax_w, softmax_b=softmax_b,
                                     return_states=return_states, softmax_top_k=softmax_top_k)
@@ -311,7 +307,7 @@ class EncoderDecoderModel(object):
     def gan_energy_loss(self, states, targets):
         '''Return the GAN energy loss. Put no variables here.'''
         ranges = []
-        for _ in xrange(cfg.batch_size):
+        for _ in range(cfg.batch_size):
             ranges.append(tf.expand_dims(tf.range(tf.shape(states)[1]), 0))
         ranges = tf.concat(0, ranges)
         lengths = tf.expand_dims(self.lengths, -1)
