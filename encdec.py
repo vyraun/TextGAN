@@ -11,7 +11,7 @@ import utils
 
 class EncoderDecoderModel(object):
 
-    '''The encoder-decoder adversarial model.'''
+    '''The variational encoder-decoder adversarial model.'''
 
     def __init__(self, vocab, training, mle_mode, mle_reuse, gan_reuse, g_optimizer=None,
                  d_optimizer=None, mle_generator=False):
@@ -28,6 +28,10 @@ class EncoderDecoderModel(object):
         self.softmax_w, self.softmax_b = self.softmax_variables()
 
         if mle_mode:
+            with tf.variable_scope("GlobalMLE", reuse=self.reuse):
+                self.global_step = tf.get_variable('global_step', shape=[],
+                                                   initializer=tf.zeros_initializer,
+                                                   trainable=False)
             # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
             self.data = tf.placeholder(tf.int32, [cfg.batch_size, None], name='data')
             # sentence lengths
@@ -38,7 +42,10 @@ class EncoderDecoderModel(object):
 
             embs = self.word_embeddings(self.data)
             embs_dropped = self.word_embeddings(self.data_dropped)
-            self.latent = self.encoder(embs[:, 1:, :])
+            embs_reversed = tf.reverse_sequence(embs, self.lengths, 1)
+            z_mean, z_logvar = self.encoder(embs_reversed[:, 1:, :])
+            eps = tf.random_normal([cfg.batch_size, cfg.latent_size])
+            self.latent = z_mean + tf.mul(tf.sqrt(tf.exp(z_logvar)), eps)
         else:
             # only the first timestep input will actually be considered
             embs_dropped = self.word_embeddings(tf.constant(vocab.sos_index,
@@ -51,9 +58,8 @@ class EncoderDecoderModel(object):
                 self.latent = tf.placeholder(tf.float32, [cfg.batch_size, cfg.latent_size],
                                              name='mle_generator_input')
             else:
-                self.rand_input = tf.random_normal([cfg.batch_size, cfg.latent_size],
-                                                   name='gan_random_input')
-                self.latent = self.generate_latent(self.rand_input)
+                self.latent = tf.random_normal([cfg.batch_size, cfg.latent_size],
+                                               name='gan_random_input')
         output, states, self.generated = self.decoder(embs_dropped, self.latent)
 
         if not mle_mode:
@@ -78,9 +84,11 @@ class EncoderDecoderModel(object):
         if mle_mode:
             # shift left the input to get the targets
             targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
-            mle_loss = self.mle_loss(output, targets)
-            self.nll = tf.reduce_sum(mle_loss) / cfg.batch_size
-            self.mle_cost = self.nll
+            self.nll = tf.reduce_sum(self.mle_loss(output, targets)) / cfg.batch_size
+            self.kld = tf.reduce_sum(self.kld_loss(z_mean, z_logvar)) / cfg.batch_size
+            self.kld_weight = tf.sigmoid((7 / cfg.anneal_scale)
+                                         * (self.global_step - cfg.anneal_bias))
+            self.mle_cost = self.nll + (self.kld_weight * self.kld)
             if training:
                 self.mle_train_op = self.train_mle(self.mle_cost)
                 self.mle_encoder_train_op = self.train_mle_encoder(self.mle_cost)
@@ -132,16 +140,6 @@ class EncoderDecoderModel(object):
             embeds = tf.nn.embedding_lookup(self.embedding, inputs, name='word_embedding_lookup')
         return embeds
 
-    def generate_latent(self, rand_input):
-        '''Transform a sample from the normal distribution to a sample from the latent
-           representation distribution.'''
-        # XXX this is prone to overfitting to some mode of the distribution.
-        #     remove this entirely for an objective that brings encoder outputs to the prior.
-        with tf.variable_scope("Transform_Latent", reuse=self.gan_reuse):
-            rand_input = utils.highway(rand_input, layer_size=2)
-            latent = utils.linear(rand_input, cfg.latent_size, True)
-        return latent
-
     def encoder(self, inputs):
         '''Encode sentence and return a latent representation in MLE mode.'''
         with tf.variable_scope("Encoder", reuse=self.mle_reuse):
@@ -150,8 +148,9 @@ class EncoderDecoderModel(object):
                                          dtype=tf.float32)
             # TODO make the encoder a BiRNN+convnet (try VAE first)
             latent = utils.highway(state, layer_size=2)
-            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
-        return latent
+            z_mean = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_mean')
+            z_logvar = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_logvar')
+        return z_mean, z_logvar
 
     def decoder(self, inputs, latent):
         '''Use the latent representation and word inputs to predict next words.'''
@@ -208,7 +207,14 @@ class EncoderDecoderModel(object):
                                                           [tf.reshape(mask, [-1])])
         return tf.reshape(loss, [cfg.batch_size, -1])
 
+    def kld_loss(self, z_mean, z_logvar):
+        '''KL divergence loss.'''
+        z_var = tf.exp(z_logvar)
+        z_mean_sq = tf.square(z_mean)
+        return 0.5 * tf.reduce_sum(z_var + z_mean_sq - 1 - z_logvar, 1)
+
     def compute_lengths(self):
+        '''Compute sentence lengths from generated sentences.'''
         eos_locs = tf.where(tf.equal(self.generated, self.vocab.eos_index))
         counts = tf.unique_with_counts(eos_locs[:, 0])[2]
         meta_indices = tf.expand_dims(tf.cumsum(counts, exclusive=True), -1)
@@ -330,21 +336,22 @@ class EncoderDecoderModel(object):
                                                                           dtype=tf.float32,
                                                                           shape=d_out.get_shape()))
 
-    def _train(self, cost, scope, optimizer):
+    def _train(self, cost, scope, optimizer, global_step=None):
         '''Generic training helper'''
         tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
         grads = tf.gradients(cost, tvars)
         if cfg.max_grad_norm > 0:
             grads, _ = tf.clip_by_global_norm(grads, cfg.max_grad_norm)
-        return optimizer.apply_gradients(zip(grads, tvars))
+        return optimizer.apply_gradients(zip(grads, tvars), global_step=global_step)
 
     def train_mle(self, cost):
         '''Training op for MLE mode.'''
-        return self._train(cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)', self.g_optimizer)
+        return self._train(cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)', self.g_optimizer,
+                           self.global_step)
 
     def train_mle_encoder(self, cost):
         '''Encoder-only training op for MLE mode.'''
-        return self._train(cost, '.*/(Embeddings|Encoder)', self.g_optimizer)
+        return self._train(cost, '.*/(Embeddings|Encoder)', self.g_optimizer, self.global_step)
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''

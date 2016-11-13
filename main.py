@@ -19,7 +19,7 @@ def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_o
     f_dict = {model.data: batch[0],
               model.data_dropped: batch[1],
               model.lengths: batch[2]}
-    ops = [model.nll, model.mle_cost]
+    ops = [model.nll, model.kld, model.mle_cost]
     # training ops are tf.no_op() for a non-training model
     if encoder_only:
         train_ops = [model.mle_encoder_train_op]
@@ -92,9 +92,11 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
+    klds = 0.0
     mle_costs = 0.0
     iters = 0
     shortterm_nlls = 0.0
+    shortterm_klds = 0.0
     shortterm_mle_costs = 0.0
     shortterm_d_costs = 0.0
     shortterm_g_costs = 0.0
@@ -126,7 +128,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             lr_tracker.mle_mode()
         ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
                                encoder_only=encoder_only, get_latent=get_latent)
-        nll, mle_cost = ret[:2]
+        nll, kld, mle_cost = ret[:3]
         if encoder_only:
             encoder_only = False
         if update_d:
@@ -177,8 +179,10 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             scheduler.add_perp(np.exp(nll / n_words))
 
         nlls += nll
+        klds += kld
         mle_costs += mle_cost
         shortterm_nlls += nll
+        shortterm_klds += kld
         shortterm_mle_costs += mle_cost
         shortterm_d_costs += d_cost
         shortterm_g_costs += g_cost
@@ -188,6 +192,7 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
         if step % cfg.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
+            avg_kld = shortterm_klds / shortterm_steps
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
             if shortterm_steps > nod_steps:
                 avg_d_cost = shortterm_d_costs / (shortterm_steps - nod_steps)
@@ -203,13 +208,16 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             else:
                 avg_g_cost = -1.0
 
-            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  d_cost: %.4f  "
-                  "g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  D:%d G:%d" %
-                  (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_d_cost, avg_g_cost,
-                   d_acc, shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps,
-                   g_steps))
+            kld_weight = session.run(mle_model.kld_weight)
+            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  kld_loss: %.4f  mle_cost: %.4f  "
+                  "kld_weight: %.4f  d_cost: %.4f  g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  "
+                  "D:%d G:%d" %
+                  (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_kld, avg_mle_cost, kld_weight,
+                   avg_d_cost, avg_g_cost, d_acc,
+                   shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
 
             shortterm_nlls = 0.0
+            shortterm_klds = 0.0
             shortterm_mle_costs = 0.0
             shortterm_d_costs = 0.0
             shortterm_g_costs = 0.0

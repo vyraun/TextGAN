@@ -10,7 +10,7 @@ import numpy as np
 import tensorflow as tf
 
 
-class Scheduler(object):
+class Scheduler(object):  # TODO start using GAN only when the KL divergence is low enough
 
     '''Scheduler for GANs'''
 
