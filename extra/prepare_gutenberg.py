@@ -58,7 +58,7 @@ def create_file(fname, lines, vocab):
                     words.append(w)
                 else:
                     words.append('<unk>')
-            print >> f, ' '.join(words)
+            print(' '.join(words), file=f)
 
 
 def summarize(output, vocab):

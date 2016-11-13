@@ -58,7 +58,7 @@ def display_sentences(output, vocab):
             print(''.join(words))
         else:
             print(' '.join(words))
-    print
+    print()
 
 
 def generate_sentences(session, model, vocab, random_dims=None, mle_generator=False,
