@@ -94,7 +94,7 @@ class Reader(object):
             mod = len(lines) % cfg.batch_size
             if mod != 0:
                 lines = [[self.vocab.sos_index, self.vocab.eos_index]
-                         for _ in xrange(cfg.batch_size - mod)] + lines
+                         for _ in range(cfg.batch_size - mod)] + lines
             yield lines
 
     def buffered_read(self, fnames):
@@ -133,7 +133,7 @@ class Reader(object):
         '''Pack python-list batches into numpy batches'''
         max_size = max(len(s) for s in batch)
         if len(batch) < cfg.batch_size:
-            batch.extend([[] for _ in xrange(cfg.batch_size - len(batch))])
+            batch.extend([[] for _ in range(cfg.batch_size - len(batch))])
         leftalign_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
         leftalign_drop_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
         sent_lengths = np.zeros([cfg.batch_size], dtype=np.int32)

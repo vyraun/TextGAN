@@ -97,7 +97,7 @@ if __name__ == '__main__':
     train_N, val_N, test_N = summarize(output, vocab)
     top_words = vocab.most_common()
     count = 0
-    for vocab_size in xrange(vocab.B()):
+    for vocab_size in range(vocab.B()):
         count += top_words[vocab_size][1]
         if count / vocab.N() >= data_coverage:
             top_words = set(w for w, c in vocab.most_common(vocab_size + 1))
