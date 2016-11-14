@@ -1,6 +1,5 @@
 import codecs
-import glob
-from os.path import join as pjoin
+from pathlib import Path
 import random
 import re
 import unicodedata
@@ -78,10 +77,10 @@ if __name__ == '__main__':
     output = []
     vocab = nltk.FreqDist()
     print('Reading...')
-    fnames = sorted(glob.glob(pjoin(input_dir, '*.txt')))
+    fnames = sorted(Path(input_dir).glob('*.txt'))
     for i, fname in enumerate(fnames):
         print('(%d/%d) %s' % (i, len(fnames), fname))
-        with codecs.open(fname, 'r', 'latin-1') as f:
+        with fname.open('r', encoding='latin-1') as f:
             paragraph = []
             for l in f:
                 line = l.strip()
