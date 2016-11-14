@@ -31,6 +31,8 @@ class EncoderDecoderModel(object):
             # left-aligned data:  <sos> w1 w2 ... w_T <eos> <pad...>
             self.data = tf.placeholder(tf.int32, [cfg.batch_size, None], name='data')
             # sentence lengths
+            # TODO get rid of dynamic sequence lengths -- asking for too much! these are still
+            #      relevant for encoding though.
             self.lengths = tf.placeholder(tf.int32, [cfg.batch_size], name='lengths')
             # sentences with word dropout
             self.data_dropped = tf.placeholder(tf.int32, [cfg.batch_size, None],
