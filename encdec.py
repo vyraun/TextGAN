@@ -111,7 +111,8 @@ class EncoderDecoderModel(object):
                                      for _ in range(num_layers)], word_dropout=cfg.word_dropout,
                                     unk_index=self.vocab.unk_index, embedding=embedding,
                                     softmax_w=softmax_w, softmax_b=softmax_b,
-                                    return_states=return_states, softmax_top_k=softmax_top_k)
+                                    return_states=return_states, softmax_top_k=softmax_top_k,
+                                    use_argmax=cfg.generate_argmax)
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''

@@ -46,7 +46,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
     """RNN cell composed sequentially of multiple simple cells."""
 
     def __init__(self, cells, word_dropout=0.0, unk_index=0, embedding=None, softmax_w=None,
-                 softmax_b=None, return_states=False, outputs_are_states=True, softmax_top_k=-1):
+                 softmax_b=None, return_states=False, outputs_are_states=True, softmax_top_k=-1,
+                 use_argmax=False):
         """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
            None, the output of the previous timestep is used for the current time step using the
            softmax variables.
@@ -65,6 +66,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.return_states = return_states
         self.outputs_are_states = outputs_are_states  # should be true for GRUs
         self.softmax_top_k = softmax_top_k
+        self.use_argmax = use_argmax
         if embedding is not None:
             self.emb_size = embedding.get_shape()[1]
         else:
@@ -132,7 +134,12 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 logits = tf.nn.bias_add(tf.matmul(cur_inp, tf.transpose(self.softmax_w),
                                                   name='Softmax_transform'),
                                         self.softmax_b)
-                prediction = tf.argmax(logits, 1)
+                if self.use_argmax:
+                    prediction = tf.argmax(logits, 1)
+                else:
+                    logits = tf.nn.log_softmax(logits)
+                    dist = tf.contrib.distributions.Categorical(logits)
+                    prediction = tf.cast(dist.sample(), tf.int64)
                 unknowns = tf.constant(self.unk_index, shape=prediction.get_shape(), dtype=tf.int64)
                 rand = tf.random_uniform(prediction.get_shape(), minval=0, maxval=1)
                 # prediction_dropped only works (and makes sense) if softmax_top_k = 1

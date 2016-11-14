@@ -18,12 +18,14 @@ flags.DEFINE_integer("char_emb_size",     50,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
 flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
-flags.DEFINE_integer("latent_size",       32,      "Latent representation size")
+flags.DEFINE_integer("latent_size",       64,      "Latent representation size")
 flags.DEFINE_float  ("word_dropout",      1.0,     "Word (or char) dropout probability for decoder "
                                                    "inputs")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
                                                    "timestep during generation (-1 for all)")
+flags.DEFINE_bool   ("generate_argmax",   False,   "Use argmax instead of sampling during "
+                                                   "generation")
 flags.DEFINE_bool   ("encoder_after_gan", True,    "Update the encoder after GAN generator update")
 flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
                                                    "than this")
