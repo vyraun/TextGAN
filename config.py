@@ -19,7 +19,7 @@ flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
 flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
 flags.DEFINE_integer("latent_size",       64,      "Latent representation size")
-flags.DEFINE_float  ("word_dropout",      1.0,     "Word (or char) dropout probability for decoder "
+flags.DEFINE_float  ("word_dropout",      0.5,     "Word (or char) dropout probability for decoder "
                                                    "inputs")
 flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
@@ -33,9 +33,8 @@ flags.DEFINE_float  ("max_d_acc",         0.98,    "Update descriminator if accu
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    50.0,    "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
-flags.DEFINE_float  ("min_kld_weight",    0.999,   "Scheduler expects KL divergence weight to be "
-                                                   "over this (less than anneal_max, -1 to "
-                                                   "disable)")
+flags.DEFINE_bool   ("sc_use_kld_weight", True,    "Scheduler waits for KL divergence weight to "
+                                                   "reach its max")
 flags.DEFINE_integer("sc_list_size",      5,       "Number of previous prints to look at in "
                                                    "scheduler")
 flags.DEFINE_float  ("sc_decay",          0.5,     "Scheduler importance decay")
@@ -93,5 +92,3 @@ else:
     cfg.hidden_size = cfg.word_hidden_size
     cfg.gen_sent_length = cfg.word_sent_length
     cfg.d_eb_margin = cfg.d_word_eb_margin
-
-assert cfg.min_kld_weight < cfg.anneal_max

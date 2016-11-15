@@ -298,8 +298,12 @@ def main(_):
             lr_tracker.update_mle_lr(cfg.mle_learning_rate)
             lr_tracker.update_g_lr(cfg.g_learning_rate)
             lr_tracker.update_d_lr(cfg.d_learning_rate)
+            if cfg.sc_use_kld_weight:
+                min_kld_weight = cfg.anneal_max - 1e-4
+            else:
+                min_kld_weight = -1
             scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        cfg.min_kld_weight, cfg.sc_list_size, cfg.sc_decay)
+                                        min_kld_weight, cfg.sc_list_size, cfg.sc_decay)
             for i in range(cfg.max_epoch):
                 print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
