@@ -181,25 +181,23 @@ class EncoderDecoderModel(object):
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
-        # don't use the mask since we also want the paddings to be proper
-        #present_mask = tf.greater(targets, 0, name='present_mask')
-        #if cfg.word_dropout > 0.99:
-        #    # don't enfoce loss on true <unk>'s
-        #    unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
-        #    mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
-        #else:
-        #    mask = tf.cast(present_mask, tf.float32)
+        present_mask = tf.greater(targets, 0, name='present_mask')
+        if cfg.word_dropout > 0.99:
+            # don't enfoce loss on true <unk>'s
+            unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
+            mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
+        else:
+            mask = tf.cast(present_mask, tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, cfg.hidden_size])
         if self.training and cfg.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])
-            #mask = tf.reshape(mask, [-1])
+            mask = tf.reshape(mask, [-1])
             loss = tf.nn.sampled_softmax_loss(self.softmax_w, self.softmax_b, output, targets,
                                               cfg.softmax_samples, len(self.vocab.vocab))
-            #loss *= mask
+            loss *= mask
         else:
             logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(self.softmax_w),
                                               name='softmax_transform_mle'), self.softmax_b)
-            mask = tf.ones(targets.get_shape())
             loss = tf.nn.seq2seq.sequence_loss_by_example([logits],
                                                           [tf.reshape(targets, [-1])],
                                                           [tf.reshape(mask, [-1])])
