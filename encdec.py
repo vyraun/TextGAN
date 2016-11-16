@@ -40,8 +40,11 @@ class EncoderDecoderModel(object):
             embs_dropped = self.word_embeddings(self.data_dropped)
             embs_reversed = tf.reverse_sequence(embs, self.lengths, 1)
             z_mean, z_logvar = self.encoder(embs_reversed[:, 1:, :])
-            eps = tf.random_normal([cfg.batch_size, cfg.latent_size])
-            self.latent = z_mean + tf.mul(tf.sqrt(tf.exp(z_logvar)), eps)
+            if cfg.variational:
+                eps = tf.random_normal([cfg.batch_size, cfg.latent_size])
+                self.latent = z_mean + tf.mul(tf.sqrt(tf.exp(z_logvar)), eps)
+            else:
+                self.latent = z_mean
         else:
             # only the first timestep input will actually be considered
             embs_dropped = self.word_embeddings(tf.constant(vocab.sos_index,
@@ -79,7 +82,10 @@ class EncoderDecoderModel(object):
             # shift left the input to get the targets
             targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
             self.nll = tf.reduce_sum(self.mle_loss(output, targets)) / cfg.batch_size
-            self.kld = tf.reduce_sum(self.kld_loss(z_mean, z_logvar)) / cfg.batch_size
+            if cfg.variational:
+                self.kld = tf.reduce_sum(self.kld_loss(z_mean, z_logvar)) / cfg.batch_size
+            else:
+                self.kld = tf.zeros([])
             self.kld_weight = cfg.anneal_max * tf.sigmoid((7 / cfg.anneal_bias) *
                                                           (self.global_step - cfg.anneal_bias))
             self.mle_cost = self.nll + (self.kld_weight * self.kld)

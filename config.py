@@ -24,6 +24,7 @@ flags.DEFINE_float  ("word_dropout",      0.5,     "Word (or char) dropout proba
 flags.DEFINE_integer("softmax_samples",   2500,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
                                                    "timestep during generation (-1 for all)")
+flags.DEFINE_bool   ("variational",       True,    "Variational encoder-decoder")
 flags.DEFINE_bool   ("generate_argmax",   True,    "Use argmax instead of sampling during "
                                                    "generation")
 flags.DEFINE_bool   ("encoder_after_gan", False,   "Update the encoder after GAN generator update")
