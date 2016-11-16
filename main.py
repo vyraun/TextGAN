@@ -170,7 +170,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
                           1)
         else:
-            n_words = int(np.sum(batch[0] != 0) / cfg.batch_size)
+            #n_words = int(np.sum(batch[0] != 0) / cfg.batch_size)
+            n_words = cfg.max_sent_length
         if scheduler is not None:
             scheduler.add_perp(np.exp(nll / n_words))
             scheduler.add_kld_weight(kld_weight)

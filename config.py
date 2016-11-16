@@ -26,7 +26,7 @@ flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider 
                                                    "timestep during generation (-1 for all)")
 flags.DEFINE_bool   ("generate_argmax",   True,    "Use argmax instead of sampling during "
                                                    "generation")
-flags.DEFINE_bool   ("encoder_after_gan", True,    "Update the encoder after GAN generator update")
+flags.DEFINE_bool   ("encoder_after_gan", False,   "Update the encoder after GAN generator update")
 flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
                                                    "than this")
 flags.DEFINE_float  ("max_d_acc",         0.98,    "Update descriminator if accuracy less than "

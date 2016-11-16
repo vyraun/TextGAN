@@ -181,23 +181,25 @@ class EncoderDecoderModel(object):
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
-        present_mask = tf.greater(targets, 0, name='present_mask')
-        if cfg.word_dropout > 0.99:
-            # don't enfoce loss on true <unk>'s
-            unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
-            mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
-        else:
-            mask = tf.cast(present_mask, tf.float32)
+        # don't use the mask since we also want the paddings to be proper
+        #present_mask = tf.greater(targets, 0, name='present_mask')
+        #if cfg.word_dropout > 0.99:
+        #    # don't enfoce loss on true <unk>'s
+        #    unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
+        #    mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
+        #else:
+        #    mask = tf.cast(present_mask, tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, cfg.hidden_size])
         if self.training and cfg.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])
-            mask = tf.reshape(mask, [-1])
+            #mask = tf.reshape(mask, [-1])
             loss = tf.nn.sampled_softmax_loss(self.softmax_w, self.softmax_b, output, targets,
                                               cfg.softmax_samples, len(self.vocab.vocab))
-            loss *= mask
+            #loss *= mask
         else:
             logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(self.softmax_w),
                                               name='softmax_transform_mle'), self.softmax_b)
+            mask = tf.ones(targets.get_shape())
             loss = tf.nn.seq2seq.sequence_loss_by_example([logits],
                                                           [tf.reshape(targets, [-1])],
                                                           [tf.reshape(mask, [-1])])
@@ -212,22 +214,33 @@ class EncoderDecoderModel(object):
     def discriminator_rnn(self, states):
         '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
+            latent = utils.highway(self.latent, layer_size=1)
+            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
             if cfg.d_rnn_bidirect:
                 hidden_size = cfg.hidden_size // 2
-                # TODO initial state
-                outputs, _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
-                                                                           hidden_size,
-                                                                           return_states=True),
-                                                             self.rnn_cell(cfg.d_num_layers,
-                                                                           hidden_size,
-                                                                           return_states=True),
-                                                             states, swap_memory=True,
-                                                             dtype=tf.float32)
+                fcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
+                bcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
+                initial = []
+                for i in range(cfg.d_num_layers * 2):
+                    initial.append(tf.nn.tanh(utils.linear(latent, hidden_size, True, 0.0,
+                                                           scope='Latent_initial%d' % i)))
+                initialf = fcell.initial_state(initial[:cfg.d_num_layers])
+                initialb = bcell.initial_state(initial[cfg.d_num_layers:])
+                seq_lengths = [cfg.max_sent_length] * cfg.batch_size
+                outputs, _ = tf.nn.bidirectional_dynamic_rnn(fcell, bcell, states,
+                                                             initial_state_fw=initialf,
+                                                             initial_state_bw=initialb,
+                                                             sequence_length=seq_lengths,
+                                                             swap_memory=True, dtype=tf.float32)
             else:
                 hidden_size = cfg.hidden_size
-                # TODO initial state
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, hidden_size,
-                                                             return_states=True), states,
+                cell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
+                initial = []
+                for i in range(cfg.d_num_layers):
+                    initial.append(tf.nn.tanh(utils.linear(latent, hidden_size, True, 0.0,
+                                                           scope='Latent_initial%d' % i)))
+                outputs, _ = tf.nn.dynamic_rnn(cell, states,
+                                               initial_state=cell.initial_state(initial),
                                                swap_memory=True, dtype=tf.float32)
                 outputs = (outputs,)  # to match bidirectional RNN's output format
             d_states = []
