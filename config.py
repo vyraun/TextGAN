@@ -54,7 +54,7 @@ flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a sentence
 flags.DEFINE_float  ("max_grad_norm",     20.0,    "Gradient clipping")
 flags.DEFINE_integer("anneal_bias",       1000,    "The step to reach half-point for KL divergence "
                                                    "weight annealing")
-flags.DEFINE_float  ("anneal_max",        0.08,    "The maximum KL divergence weight")
+flags.DEFINE_float  ("anneal_max",        0.1,     "The maximum KL divergence weight")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, "
                                                    "adadelta)")
