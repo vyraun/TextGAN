@@ -141,7 +141,7 @@ class EncoderDecoderModel(object):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size), inputs,
                                          sequence_length=self.lengths-1, swap_memory=True,
                                          dtype=tf.float32)
-            # TODO make the encoder a BiRNN+convnet (try VAE first)
+            # XXX make the encoder a BiRNN+convnet (try VAE first)
             latent = utils.highway(state, layer_size=2)
             z_mean = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_mean')
             z_logvar = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_logvar')
@@ -152,16 +152,17 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("Decoder", reuse=self.reuse):
             latent = utils.highway(latent, layer_size=1)
             latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
-            # TODO use latent to generate the initial state for the decoder
+            initial = []
+            for i in range(cfg.num_layers):
+                initial.append(tf.nn.tanh(utils.linear(latent, cfg.hidden_size, True, 0.0,
+                                                       scope='Latent_initial%d' % i)))
             if self.mle_mode:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size,
-                                                             latent, return_states=True), inputs,
-                                               swap_memory=True, dtype=tf.float32)
+                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, latent, return_states=True)
             else:
-                outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size,
-                                                             latent, self.embedding, self.softmax_w,
-                                                             self.softmax_b, return_states=True),
-                                               inputs, swap_memory=True, dtype=tf.float32)
+                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, latent, self.embedding,
+                                     self.softmax_w, self.softmax_b, return_states=True)
+            outputs, _ = tf.nn.dynamic_rnn(cell, inputs, initial_state=cell.initial_state(initial),
+                                           swap_memory=True, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
             if self.mle_mode:
                 generated = None
@@ -213,6 +214,7 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("Discriminator", reuse=self.reuse):
             if cfg.d_rnn_bidirect:
                 hidden_size = cfg.hidden_size // 2
+                # TODO initial state
                 outputs, _ = tf.nn.bidirectional_dynamic_rnn(self.rnn_cell(cfg.d_num_layers,
                                                                            hidden_size,
                                                                            return_states=True),
@@ -223,6 +225,7 @@ class EncoderDecoderModel(object):
                                                              dtype=tf.float32)
             else:
                 hidden_size = cfg.hidden_size
+                # TODO initial state
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, hidden_size,
                                                              return_states=True), states,
                                                swap_memory=True, dtype=tf.float32)
@@ -269,10 +272,11 @@ class EncoderDecoderModel(object):
     def discriminator_energy(self, states):
         '''An energy-based discriminator that tries to reconstruct the input states.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
+            # TODO initial state
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
                                          swap_memory=True, dtype=tf.float32,
                                          scope='discriminator_encoder')
-            # TODO use BiRNN+convnet for the encoder (try VAE first)
+            # XXX use BiRNN+convnet for the encoder (try VAE first)
             # this latent is of size cfg.hidden_size since it needs a lot more capacity than
             # cfg.latent_size to reproduce the hidden states
             latent = utils.highway(state, layer_size=1)

@@ -92,6 +92,13 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             size += 1  # for the current timestep prediction
         return size
 
+    def initial_state(self, initial):
+        '''Generate the required initial state from $initial.'''
+        if self.emb_size:
+            initial.append(tf.zeros([initial[0].get_shape()[0], self.emb_size]))
+            initial.append(tf.zeros([initial[0].get_shape()[0], 1]))
+        return tuple(initial)
+
     def expected_embedding(self, logits, prediction):
         """Use the current logits to return the embedding for the next timestep input."""
         if self.softmax_top_k == 1:
