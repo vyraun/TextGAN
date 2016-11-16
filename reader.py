@@ -102,7 +102,9 @@ class Reader(object):
             batches = [b for b in utils.grouper(cfg.batch_size, line_collection)]
             random.shuffle(batches)
             for batch in batches:
-                yield self.pack(batch)
+                ret = self.pack(batch)
+                if ret is not None:
+                    yield ret
 
     def training(self):
         '''Read batches from training data'''
@@ -128,10 +130,12 @@ class Reader(object):
     def pack(self, batch):
         '''Pack python-list batches into numpy batches'''
         max_size = max(len(s) for s in batch)
+        if max_size > cfg.max_sent_length:
+            return None
         if len(batch) < cfg.batch_size:
             batch.extend([[] for _ in range(cfg.batch_size - len(batch))])
-        leftalign_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
-        leftalign_drop_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
+        leftalign_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
+        leftalign_drop_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
         sent_lengths = np.zeros([cfg.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s

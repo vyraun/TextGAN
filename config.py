@@ -49,10 +49,8 @@ flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for dis
 flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")
 flags.DEFINE_integer("d_conv_window",     5,       "Convolution window for convolution on "
                                                    "discriminative RNN's states")
-flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a generated sentence for "
-                                                   "word model")
-flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a generated sentence for "
-                                                   "char model")
+flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a sentence for word model")
+flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a sentence for char model")
 flags.DEFINE_float  ("max_grad_norm",     20.0,    "Gradient clipping")
 flags.DEFINE_integer("anneal_bias",       1000,    "The step to reach half-point for KL divergence "
                                                    "weight annealing")
@@ -85,10 +83,10 @@ flags.DEFINE_integer("validate_every",    1,       "Validate every these many ep
 if cfg.char_model:
     cfg.emb_size = cfg.char_emb_size
     cfg.hidden_size = cfg.char_hidden_size
-    cfg.gen_sent_length = cfg.char_sent_length
+    cfg.max_sent_length = cfg.char_sent_length
     cfg.d_eb_margin = cfg.d_char_eb_margin
 else:
     cfg.emb_size = cfg.word_emb_size
     cfg.hidden_size = cfg.word_hidden_size
-    cfg.gen_sent_length = cfg.word_sent_length
+    cfg.max_sent_length = cfg.word_sent_length
     cfg.d_eb_margin = cfg.d_word_eb_margin

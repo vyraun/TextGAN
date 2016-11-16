@@ -119,7 +119,9 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
             if self.embedding is not None:
                 cur_inp = tf.select(tf.greater(state[-1][:, 0], 0.5), state[-2], inputs)
-                unk_inp = tf.constant(self.unk_index, shape=cur_inp.get_shape(), dtype=tf.int64)
+                unk_inp = tf.constant(self.unk_index, shape=cur_inp.get_shape()[:-1],
+                                      dtype=tf.int32)
+                unk_inp = tf.nn.embedding_lookup(self.embedding, unk_inp, name='unk_embedding')
             else:
                 cur_inp = inputs
             new_states = []

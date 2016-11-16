@@ -47,7 +47,7 @@ def display_sentences(output, vocab):
         print('Sentence %d:' % i, end=' ')
         words = []
         for word in sent:
-            if word == vocab.eos_index:
+            if not word or word == vocab.eos_index:
                 break
             words.append(vocab.vocab[word])
         if cfg.char_model:
