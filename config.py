@@ -21,10 +21,10 @@ flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for ch
 flags.DEFINE_integer("latent_size",       64,      "Latent representation size")
 flags.DEFINE_float  ("word_dropout",      0.5,     "Word (or char) dropout probability for decoder "
                                                    "inputs")
-flags.DEFINE_integer("softmax_samples",   1000,    "Number of classes to sample for softmax")
+flags.DEFINE_integer("softmax_samples",   2500,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("generator_top_k",   1,       "Number of words to consider from previous "
                                                    "timestep during generation (-1 for all)")
-flags.DEFINE_bool   ("generate_argmax",   False,   "Use argmax instead of sampling during "
+flags.DEFINE_bool   ("generate_argmax",   True,    "Use argmax instead of sampling during "
                                                    "generation")
 flags.DEFINE_bool   ("encoder_after_gan", True,    "Update the encoder after GAN generator update")
 flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
@@ -39,7 +39,7 @@ flags.DEFINE_integer("sc_list_size",      5,       "Number of previous prints to
                                                    "scheduler")
 flags.DEFINE_float  ("sc_decay",          0.5,     "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
-flags.DEFINE_bool   ("d_energy_based",    True,    "Energy-based discriminator")
+flags.DEFINE_bool   ("d_energy_based",    False,   "Energy-based discriminator")
 flags.DEFINE_float  ("d_word_eb_margin",  512.0,   "Margin for energy-based discriminator for word "
                                                    "model")
 flags.DEFINE_float  ("d_char_eb_margin",  1024.0,  "Margin for energy-based discriminator for char "
@@ -54,9 +54,9 @@ flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a generate
 flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a generated sentence for "
                                                    "char model")
 flags.DEFINE_float  ("max_grad_norm",     20.0,    "Gradient clipping")
-flags.DEFINE_integer("anneal_bias",       3500,    "The step to reach half-point for KL divergence "
+flags.DEFINE_integer("anneal_bias",       1000,    "The step to reach half-point for KL divergence "
                                                    "weight annealing")
-flags.DEFINE_float  ("anneal_max",        1.0,     "The maximum KL divergence weight")
+flags.DEFINE_float  ("anneal_max",        0.08,    "The maximum KL divergence weight")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, "
                                                    "adadelta)")

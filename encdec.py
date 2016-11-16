@@ -156,6 +156,7 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("Decoder", reuse=self.reuse):
             latent = utils.highway(latent, layer_size=1)
             latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
+            # TODO use latent to generate the initial state for the decoder
             if self.mle_mode:
                 outputs, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size,
                                                              latent, return_states=True), inputs,

@@ -119,6 +119,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
             if self.embedding is not None:
                 cur_inp = tf.select(tf.greater(state[-1][:, 0], 0.5), state[-2], inputs)
+                unk_inp = tf.constant(self.unk_index, shape=cur_inp.get_shape(), dtype=tf.int64)
             else:
                 cur_inp = inputs
             new_states = []
@@ -129,23 +130,25 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                                          "%s" % (len(self.state_size), state))
                     cur_state = state[i]
                     cur_inp, new_state = cell(cur_inp, cur_state)
+                    if self.embedding is not None and self.word_dropout > 0.0:
+                        unk_inp, _ = cell(unk_inp, state[i])
                     new_states.append(new_state)
             if self.embedding is not None:
                 logits = tf.nn.bias_add(tf.matmul(cur_inp, tf.transpose(self.softmax_w),
                                                   name='Softmax_transform'),
                                         self.softmax_b)
+                if self.word_dropout > 0.0:
+                    ulogits = tf.nn.bias_add(tf.matmul(unk_inp, tf.transpose(self.softmax_w),
+                                                       name='Softmax_transform_unk'),
+                                             self.softmax_b)
+                    logits += ulogits
                 if self.use_argmax:
                     prediction = tf.argmax(logits, 1)
-                else:
+                else:  # TODO implement a truncated sample (from, say, top 3)
                     logits = tf.nn.log_softmax(logits)
                     dist = tf.contrib.distributions.Categorical(logits)
                     prediction = tf.cast(dist.sample(), tf.int64)
-                unknowns = tf.constant(self.unk_index, shape=prediction.get_shape(), dtype=tf.int64)
-                rand = tf.random_uniform(prediction.get_shape(), minval=0, maxval=1)
-                # prediction_dropped only works (and makes sense) if softmax_top_k = 1
-                prediction_dropped = tf.select(tf.less(rand, self.word_dropout), unknowns,
-                                               prediction)
-                new_states.append(self.expected_embedding(logits, prediction_dropped))
+                new_states.append(self.expected_embedding(logits, prediction))
                 new_states.append(tf.ones([inputs.get_shape()[0], 1]))  # we have valid prev input
         if self.return_states:
             output = [cur_inp]
