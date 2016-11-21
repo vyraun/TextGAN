@@ -38,13 +38,13 @@ class RNNLMModel(object):
             # only the first timestep input will actually be considered
             embs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
             # so the rest can be zeros
-            embs = tf.concat(1, [embs_dropped, tf.zeros([cfg.batch_size, cfg.max_sent_length - 1,
-                                                         cfg.emb_size])])
-        output, states, self.generated = self.generator(embs_dropped)
+            embs = tf.concat(1, [embs, tf.zeros([cfg.batch_size, cfg.max_sent_length - 1,
+                                                 cfg.emb_size])])
+        output, states, self.generated = self.generator(embs)
 
         if cfg.d_energy_based:
             d_out = self.discriminator_energy(states)
-            d_loss, g_loss = self.gan_energy_loss(d_out, states)
+            d_loss, g_loss = self.gan_energy_loss(d_out[:, :-1, :], states)
             self.d_cost = tf.reduce_sum(d_loss) / cfg.batch_size
             self.g_cost = tf.reduce_sum(g_loss) / cfg.batch_size
         else:
@@ -60,14 +60,12 @@ class RNNLMModel(object):
             # shift left the input to get the targets
             targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
             self.nll = tf.reduce_sum(self.mle_loss(output, targets)) / cfg.batch_size
-            self.mle_cost = self.nll + (self.kld_weight * self.kld)
+            self.mle_cost = self.nll
             if training:
                 self.mle_train_op = self.train_mle(self.mle_cost)
-                self.mle_encoder_train_op = self.train_mle_encoder(self.mle_cost)
                 self.d_train_op = self.train_d(self.d_cost)
             else:
                 self.mle_train_op = tf.no_op()
-                self.mle_encoder_train_op = tf.no_op()
                 self.d_train_op = tf.no_op()
         else:
             if training:
@@ -137,12 +135,9 @@ class RNNLMModel(object):
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
         present_mask = tf.greater(targets, 0, name='present_mask')
-        if cfg.word_dropout > 0.99:
-            # don't enfoce loss on true <unk>'s
-            unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
-            mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
-        else:
-            mask = tf.cast(present_mask, tf.float32)
+        # don't enfoce loss on true <unk>'s
+        unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
+        mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, cfg.hidden_size])
         if self.training and cfg.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])
@@ -211,19 +206,21 @@ class RNNLMModel(object):
     def discriminator_energy(self, states):
         '''An energy-based discriminator that tries to reconstruct the input states.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
-            # TODO initial state
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
                                          swap_memory=True, dtype=tf.float32,
                                          scope='discriminator_encoder')
             # XXX use BiRNN+convnet for the encoder
-            # this latent is of size cfg.hidden_size since it needs a lot more capacity than
-            # cfg.latent_size to reproduce the hidden states
-            latent = utils.highway(state, layer_size=1)
-            latent = utils.linear(latent, cfg.hidden_size, True,
-                                  scope='discriminator_latent_transform')
-            decoder_input = tf.concat(1, [tf.zeros([cfg.batch_size, 1, cfg.hidden_size]), states])
-            # TODO concatenate latent to decoder_input instead of passing it as below
-            output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
+            # this latent needs a more capacity than to reproduce the hidden states
+            latent_size = cfg.hidden_size // 10
+            latent = tf.nn.elu(utils.linear(state, latent_size, True,
+                                            scope='discriminator_latent_transform'))
+            latent = utils.highway(latent, layer_size=2, f=tf.nn.elu)
+            decoder_input = tf.concat(1, [tf.zeros([cfg.batch_size, 1, cfg.hidden_size]),
+                                          states])
+            decoder_input = tf.concat(2, [decoder_input,
+                                          tf.tile(tf.expand_dims(latent, 1),
+                                                  [1, decoder_input.get_shape()[1].value, 1])])
+            output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size),
                                           decoder_input, swap_memory=True, dtype=tf.float32,
                                           scope='discriminator_decoder')
             output = tf.reshape(output, [-1, cfg.hidden_size])
