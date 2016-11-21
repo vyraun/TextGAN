@@ -5,27 +5,22 @@ import numpy as np
 import tensorflow as tf
 
 from config import cfg
-from encdec import EncoderDecoderModel
 from reader import Reader, Vocab
+from rnnlm import RNNLMModel
 import utils
 
 
-def call_mle_session(session, model, batch, use_gan, get_latent=False, encoder_only=False):
+def call_mle_session(session, model, batch, use_gan):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.data: batch[0],
               model.data_dropped: batch[1],
               model.lengths: batch[2]}
-    ops = [model.nll, model.kld, model.mle_cost, model.kld_weight]
+    ops = [model.nll, model.mle_cost]
     # training ops are tf.no_op() for a non-training model
-    if encoder_only:
-        train_ops = [model.mle_encoder_train_op]
-    else:
-        train_ops = [model.mle_train_op]
+    train_ops = [model.mle_train_op]
     if use_gan:
         ops.append(model.d_cost)
         train_ops.append(model.d_train_op)
-    if get_latent:
-        ops.append(model.latent)
     ops.extend(train_ops)
     return session.run(ops, f_dict)[:-len(train_ops)]
 
@@ -41,36 +36,10 @@ def call_gan_session(session, model, generator=False):
     return session.run(ops)[:-1]
 
 
-def display_sentences(output, vocab):
-    '''Display sentences from indices.'''
-    for i, sent in enumerate(output):
-        print('Sentence %d:' % i, end=' ')
-        words = []
-        for word in sent:
-            if not word or word == vocab.eos_index:
-                break
-            words.append(vocab.vocab[word])
-        if cfg.char_model:
-            print(''.join(words))
-        else:
-            print(' '.join(words))
-    print()
-
-
-def generate_sentences(session, model, vocab, random_dims=None, mle_generator=False,
-                       true_output=None):
-    '''Generate sentences using the generator, either novel or from known encodings (mle_generator).
-    '''
-    if mle_generator:
-        print('\nTrue output')
-        display_sentences(true_output[:, 1:], vocab)
-        print('Sentences generated from true encodings')
-        f_dict = {model.latent: random_dims}
-    else:
-        print('\nNovel sentences: new batch')
-        f_dict = {}
-    output = session.run(model.generated, f_dict)
-    display_sentences(output, vocab)
+def generate_sentences(session, model, vocab):
+    '''Generate sentences using the generator.'''
+    # TODO remove this if nothing else is to be added here
+    utils.display_sentences(session.run(model.generated), vocab, cfg.char_model)
 
 
 def save_model(session, saver, perp, cur_iters):
@@ -83,16 +52,14 @@ def save_model(session, saver, perp, cur_iters):
     print("Saved to", save_file)
 
 
-def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader, vocab,
+def run_epoch(epoch, session, mle_model, gan_model, batch_loader, vocab,
               saver, steps, max_steps, scheduler, gen_every=0, lr_tracker=None):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
-    klds = 0.0
     mle_costs = 0.0
     iters = 0
     shortterm_nlls = 0.0
-    shortterm_klds = 0.0
     shortterm_mle_costs = 0.0
     shortterm_d_costs = 0.0
     shortterm_g_costs = 0.0
@@ -102,8 +69,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
     nog_steps = 0
     g_steps = 0
     d_steps = 0
-    latest_latent = None
-    encoder_only = False
     if cfg.d_energy_based:
         update_d = True
         update_g = True
@@ -113,26 +78,17 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
     for step, batch in enumerate(batch_loader):
         if scheduler is not None:
-            update_d = not encoder_only and scheduler.update_d()
-            update_g = not encoder_only and scheduler.update_g()
-        if gen_every > 0 and (step + 1) % gen_every == 0:
-            get_latent = True
-        else:
-            get_latent = False
+            update_d = scheduler.update_d()
+            update_g = scheduler.update_g()
 
         if lr_tracker is not None:
             lr_tracker.mle_mode()
-        ret = call_mle_session(session, mle_model, batch, use_gan=update_d,
-                               encoder_only=encoder_only, get_latent=get_latent)
-        nll, kld, mle_cost, kld_weight = ret[:4]
-        if encoder_only:
-            encoder_only = False
+        ret = call_mle_session(session, mle_model, batch, use_gan=update_d)
+        nll, mle_cost = ret[:2]
         if update_d:
-            d_cost = ret[4]
+            d_cost = ret[-1]
         else:
             d_cost = None
-        if get_latent:
-            latest_latent = ret[-1]
         if update_d:
             d_steps += 1
             d1_cost, g1_cost = call_gan_session(session, gan_model)
@@ -143,8 +99,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             if lr_tracker is not None:
                 lr_tracker.gan_mode()
             d2_cost, g2_cost = call_gan_session(session, gan_model, generator=True)
-            if cfg.encoder_after_gan:
-                encoder_only = True
         else:
             d2_cost = g2_cost = None
         d_costs = [c for c in [d_cost, d1_cost, d2_cost] if c is not None]
@@ -176,10 +130,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             scheduler.add_kld_weight(kld_weight)
 
         nlls += nll
-        klds += kld
         mle_costs += mle_cost
         shortterm_nlls += nll
-        shortterm_klds += kld
         shortterm_mle_costs += mle_cost
         shortterm_d_costs += d_cost
         shortterm_g_costs += g_cost
@@ -189,7 +141,6 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
 
         if step % cfg.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
-            avg_kld = shortterm_klds / shortterm_steps
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
             if shortterm_steps > nod_steps:
                 avg_d_cost = shortterm_d_costs / (shortterm_steps - nod_steps)
@@ -204,15 +155,12 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
                 avg_g_cost = shortterm_g_costs / (shortterm_steps - nog_steps)
             else:
                 avg_g_cost = -1.0
-            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  kld_loss: %.4f  mle_cost: %.4f  "
-                  "kld_weight: %.4f  d_cost: %.4f  g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  "
-                  "D:%d G:%d" %
-                  (epoch + 1, step, np.exp(avg_nll), avg_nll, avg_kld, avg_mle_cost, kld_weight,
-                   avg_d_cost, avg_g_cost, d_acc,
-                   shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
+            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  d_cost: %.4f  "
+                  "g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  D:%d G:%d" % (epoch + 1, step,
+                  np.exp(avg_nll), avg_nll, avg_mle_cost, avg_d_cost, avg_g_cost, d_acc,
+                  shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
 
             shortterm_nlls = 0.0
-            shortterm_klds = 0.0
             shortterm_mle_costs = 0.0
             shortterm_d_costs = 0.0
             shortterm_g_costs = 0.0
@@ -225,10 +173,8 @@ def run_epoch(epoch, session, mle_model, gan_model, mle_generator, batch_loader,
             start_time = time.time()
 
         if gen_every > 0 and (step + 1) % gen_every == 0:
-            if latest_latent is not None:
-                generate_sentences(session, mle_generator, vocab, latest_latent, True, batch[0])
             for _ in range(cfg.gen_samples):
-                generate_sentences(session, gan_model, vocab)
+                generate_sentences(session, vocab)
 
         cur_iters = steps + step
         if saver is not None and cur_iters and cfg.save_every > 0 and \
@@ -267,17 +213,15 @@ def main(_):
                 lr_tracker = utils.LearningRateTracker(session, g_lr, d_lr)
                 g_optimizer = utils.get_optimizer(g_lr, cfg.g_optimizer)
                 d_optimizer = utils.get_optimizer(d_lr, cfg.d_optimizer)
-                mle_model = EncoderDecoderModel(vocab, True, True, None, None,
+                mle_model = RNNLMModel(vocab, True, True, None, None,
                                                 g_optimizer=g_optimizer, d_optimizer=d_optimizer)
-                gan_model = EncoderDecoderModel(vocab, True, False, True, None,
+                gan_model = RNNLMModel(vocab, True, False, True, None,
                                                 g_optimizer=g_optimizer, d_optimizer=d_optimizer)
-                eval_mle_model = EncoderDecoderModel(vocab, False, True, True, None)
-                eval_gan_model = EncoderDecoderModel(vocab, False, False, True, True)
+                eval_mle_model = RNNLMModel(vocab, False, True, True, None)
+                eval_gan_model = RNNLMModel(vocab, False, False, True, True)
             else:
-                test_mle_model = EncoderDecoderModel(vocab, False, True, None, None)
-                test_gan_model = EncoderDecoderModel(vocab, False, False, True, None)
-            mle_generator = EncoderDecoderModel(vocab, False, False, True, True,
-                                                mle_generator=True)
+                test_mle_model = RNNLMModel(vocab, False, True, None, None)
+                test_gan_model = RNNLMModel(vocab, False, False, True, None)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
@@ -291,6 +235,9 @@ def main(_):
                 print("You need to provide a valid model file for testing!")
                 sys.exit(1)
 
+        utils.list_all_variables()  # TODO remove
+        print(1 // 0)
+
         if cfg.training:
             steps = 0
             train_perps = []
@@ -298,15 +245,11 @@ def main(_):
             lr_tracker.update_mle_lr(cfg.mle_learning_rate)
             lr_tracker.update_g_lr(cfg.g_learning_rate)
             lr_tracker.update_d_lr(cfg.d_learning_rate)
-            if cfg.sc_use_kld_weight:
-                min_kld_weight = cfg.anneal_max - 1e-4
-            else:
-                min_kld_weight = -1
             scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        min_kld_weight, cfg.sc_list_size, cfg.sc_decay)
+                                        cfg.sc_list_size, cfg.sc_decay)
             for i in range(cfg.max_epoch):
                 print("\nEpoch: %d" % (i + 1))
-                perplexity, steps = run_epoch(i, session, mle_model, gan_model, mle_generator,
+                perplexity, steps = run_epoch(i, session, mle_model, gan_model,
                                               reader.training(), vocab, saver, steps,
                                               cfg.max_steps, scheduler, gen_every=cfg.gen_every,
                                               lr_tracker=lr_tracker)
@@ -314,7 +257,7 @@ def main(_):
                 train_perps.append(perplexity)
                 if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_mle_model, eval_gan_model,
-                                              mle_generator, reader.validation(), vocab,
+                                              reader.validation(), vocab,
                                               None, 0, -1, None, gen_every=-1)
                     print("Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity))
                     valid_perps.append(perplexity)
@@ -326,7 +269,7 @@ def main(_):
                     break
         else:
             print('\nTesting')
-            perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model, mle_generator,
+            perplexity, _ = run_epoch(0, session, test_mle_model, test_gan_model,
                                       reader.testing(), vocab, None, 0, cfg.max_steps, None,
                                       gen_every=-1)
             print("Test Perplexity: %.3f" % perplexity)

@@ -5,12 +5,12 @@ import rnncell
 import utils
 
 
-class EncoderDecoderModel(object):
+class RNNLMModel(object):
 
-    '''The variational encoder-decoder adversarial model.'''
+    '''The adversarial recurrent language model.'''
 
     def __init__(self, vocab, training, mle_mode, mle_reuse, gan_reuse, g_optimizer=None,
-                 d_optimizer=None, mle_generator=False):
+                 d_optimizer=None):
         self.vocab = vocab
         self.training = training
         self.mle_mode = mle_mode
@@ -32,48 +32,26 @@ class EncoderDecoderModel(object):
             self.data = tf.placeholder(tf.int32, [cfg.batch_size, cfg.max_sent_length], name='data')
             # sentence lengths
             self.lengths = tf.placeholder(tf.int32, [cfg.batch_size], name='lengths')
-            # sentences with word dropout
-            self.data_dropped = tf.placeholder(tf.int32, [cfg.batch_size, cfg.max_sent_length],
-                                               name='data_dropped')
 
             embs = self.word_embeddings(self.data)
-            embs_dropped = self.word_embeddings(self.data_dropped)
-            embs_reversed = tf.reverse_sequence(embs, self.lengths, 1)
-            z_mean, z_logvar = self.encoder(embs_reversed[:, 1:, :])
-            if cfg.variational:
-                eps = tf.random_normal([cfg.batch_size, cfg.latent_size])
-                self.latent = z_mean + tf.mul(tf.sqrt(tf.exp(z_logvar)), eps)
-            else:
-                self.latent = z_mean
         else:
             # only the first timestep input will actually be considered
-            embs_dropped = self.word_embeddings(tf.constant(vocab.sos_index,
-                                                            shape=[cfg.batch_size, 1]))
+            embs = self.word_embeddings(tf.constant(vocab.sos_index, shape=[cfg.batch_size, 1]))
             # so the rest can be zeros
-            embs_dropped = tf.concat(1, [embs_dropped, tf.zeros([cfg.batch_size,
-                                                                 cfg.max_sent_length - 1,
-                                                                 cfg.emb_size])])
-            if mle_generator:
-                self.latent = tf.placeholder(tf.float32, [cfg.batch_size, cfg.latent_size],
-                                             name='mle_generator_input')
-            else:
-                self.latent = tf.random_normal([cfg.batch_size, cfg.latent_size],
-                                               name='gan_random_input')
-        output, states, self.generated = self.decoder(embs_dropped, self.latent)
+            embs = tf.concat(1, [embs_dropped, tf.zeros([cfg.batch_size, cfg.max_sent_length - 1,
+                                                         cfg.emb_size])])
+        output, states, self.generated = self.generator(embs_dropped)
 
         if cfg.d_energy_based:
-            d_out, d_latent = self.discriminator_energy(states)
-        elif cfg.d_rnn:
-            d_out = self.discriminator_rnn(states)
-        else:
-            d_out = self.discriminator_finalstate(states)
-        if cfg.d_energy_based:
-            # shift left the states to get the targets
-            targets = tf.concat(1, [states, tf.expand_dims(d_latent, 1)])
-            d_loss, g_loss = self.gan_energy_loss(d_out, targets)
+            d_out = self.discriminator_energy(states)
+            d_loss, g_loss = self.gan_energy_loss(d_out, states)
             self.d_cost = tf.reduce_sum(d_loss) / cfg.batch_size
             self.g_cost = tf.reduce_sum(g_loss) / cfg.batch_size
         else:
+            if cfg.d_rnn:
+                d_out = self.discriminator_rnn(states)
+            else:
+                d_out = self.discriminator_finalstate(states)
             gan_loss = self.gan_loss(d_out)
             self.d_cost = tf.reduce_sum(gan_loss) / cfg.batch_size
             self.g_cost = -self.d_cost
@@ -82,12 +60,6 @@ class EncoderDecoderModel(object):
             # shift left the input to get the targets
             targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])
             self.nll = tf.reduce_sum(self.mle_loss(output, targets)) / cfg.batch_size
-            if cfg.variational:
-                self.kld = tf.reduce_sum(self.kld_loss(z_mean, z_logvar)) / cfg.batch_size
-            else:
-                self.kld = tf.zeros([])
-            self.kld_weight = cfg.anneal_max * tf.sigmoid((7 / cfg.anneal_bias) *
-                                                          (self.global_step - cfg.anneal_bias))
             self.mle_cost = self.nll + (self.kld_weight * self.kld)
             if training:
                 self.mle_train_op = self.train_mle(self.mle_cost)
@@ -105,18 +77,14 @@ class EncoderDecoderModel(object):
                 self.d_train_op = tf.no_op()
                 self.g_train_op = tf.no_op()
 
-    def rnn_cell(self, num_layers, hidden_size, latent=None, embedding=None, softmax_w=None,
-                 softmax_b=None, return_states=False):
+    def rnn_cell(self, num_layers, hidden_size, embedding=None, softmax_w=None, softmax_b=None,
+                 return_states=False):
         '''Return a multi-layer RNN cell.'''
-        softmax_top_k = cfg.generator_top_k
-        if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
-            softmax_top_k = -1
-        return rnncell.MultiRNNCell([rnncell.GRUCell(hidden_size, latent=latent)
-                                     for _ in range(num_layers)], word_dropout=cfg.word_dropout,
-                                    unk_index=self.vocab.unk_index, embedding=embedding,
+        # TODO return pre-tanh states from GRU
+        return rnncell.MultiRNNCell([tf.nn.rnn_cell.GRUCell(hidden_size)
+                                     for _ in range(num_layers)], embedding=embedding,
                                     softmax_w=softmax_w, softmax_b=softmax_b,
-                                    return_states=return_states, softmax_top_k=softmax_top_k,
-                                    use_argmax=cfg.generate_argmax)
+                                    return_states=return_states)
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''
@@ -141,34 +109,15 @@ class EncoderDecoderModel(object):
             embeds = tf.nn.embedding_lookup(self.embedding, inputs, name='word_embedding_lookup')
         return embeds
 
-    def encoder(self, inputs):
-        '''Encode sentence and return a latent representation in MLE mode.'''
-        with tf.variable_scope("Encoder", reuse=self.mle_reuse):
-            _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.num_layers, cfg.hidden_size), inputs,
-                                         sequence_length=self.lengths-1, swap_memory=True,
-                                         dtype=tf.float32)
-            # XXX make the encoder a BiRNN+convnet (try VAE first)
-            latent = utils.highway(state, layer_size=2)
-            z_mean = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_mean')
-            z_logvar = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_logvar')
-        return z_mean, z_logvar
-
-    def decoder(self, inputs, latent):
-        '''Use the latent representation and word inputs to predict next words.'''
-        with tf.variable_scope("Decoder", reuse=self.reuse):
-            latent = utils.highway(latent, layer_size=1)
-            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
-            initial = []
-            for i in range(cfg.num_layers):
-                initial.append(tf.nn.tanh(utils.linear(latent, cfg.hidden_size, True, 0.0,
-                                                       scope='Latent_initial%d' % i)))
+    def generator(self, inputs):
+        '''Use the word inputs to predict next words.'''
+        with tf.variable_scope("Generator", reuse=self.reuse):
             if self.mle_mode:
-                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, latent, return_states=True)
+                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True)
             else:
-                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, latent, self.embedding,
+                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, self.embedding,
                                      self.softmax_w, self.softmax_b, return_states=True)
-            outputs, _ = tf.nn.dynamic_rnn(cell, inputs, initial_state=cell.initial_state(initial),
-                                           swap_memory=True, dtype=tf.float32)
+            outputs, _ = tf.nn.dynamic_rnn(cell, inputs, swap_memory=True, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
             if self.mle_mode:
                 generated = None
@@ -209,43 +158,21 @@ class EncoderDecoderModel(object):
                                                           [tf.reshape(mask, [-1])])
         return tf.reshape(loss, [cfg.batch_size, -1])
 
-    def kld_loss(self, z_mean, z_logvar):
-        '''KL divergence loss.'''
-        z_var = tf.exp(z_logvar)
-        z_mean_sq = tf.square(z_mean)
-        return 0.5 * tf.reduce_sum(z_var + z_mean_sq - 1 - z_logvar, 1)
-
     def discriminator_rnn(self, states):
         '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
         with tf.variable_scope("Discriminator", reuse=self.reuse):
-            latent = utils.highway(self.latent, layer_size=1)
-            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
             if cfg.d_rnn_bidirect:
                 hidden_size = cfg.hidden_size // 2
                 fcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
                 bcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
-                initial = []
-                for i in range(cfg.d_num_layers * 2):
-                    initial.append(tf.nn.tanh(utils.linear(latent, hidden_size, True, 0.0,
-                                                           scope='Latent_initial%d' % i)))
-                initialf = fcell.initial_state(initial[:cfg.d_num_layers])
-                initialb = bcell.initial_state(initial[cfg.d_num_layers:])
                 seq_lengths = [cfg.max_sent_length] * cfg.batch_size
                 outputs, _ = tf.nn.bidirectional_dynamic_rnn(fcell, bcell, states,
-                                                             initial_state_fw=initialf,
-                                                             initial_state_bw=initialb,
                                                              sequence_length=seq_lengths,
                                                              swap_memory=True, dtype=tf.float32)
             else:
                 hidden_size = cfg.hidden_size
                 cell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
-                initial = []
-                for i in range(cfg.d_num_layers):
-                    initial.append(tf.nn.tanh(utils.linear(latent, hidden_size, True, 0.0,
-                                                           scope='Latent_initial%d' % i)))
-                outputs, _ = tf.nn.dynamic_rnn(cell, states,
-                                               initial_state=cell.initial_state(initial),
-                                               swap_memory=True, dtype=tf.float32)
+                outputs, _ = tf.nn.dynamic_rnn(cell, states, swap_memory=True, dtype=tf.float32)
                 outputs = (outputs,)  # to match bidirectional RNN's output format
             d_states = []
             for out in outputs:
@@ -268,9 +195,6 @@ class EncoderDecoderModel(object):
             conv_out = tf.reshape(conv, [cfg.batch_size, -1, cfg.hidden_size // cfg.d_conv_window])
             conv_out = tf.nn.elu(tf.nn.bias_add(conv_out, b_conv))
             reduced = tf.reduce_mean(conv_out, [1])
-            lin_latent = tf.nn.elu(utils.linear(self.latent, cfg.hidden_size // cfg.d_conv_window,
-                                                True, 0.0, scope='lin_latent'))
-            reduced = tf.concat(1, [lin_latent, reduced])
             output = utils.linear(reduced, 1, True, 0.0, scope='discriminator_output')
         return output
 
@@ -279,9 +203,7 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("Discriminator", reuse=self.reuse):
             # indices = lengths - 2, since the generated output skips <sos>
             #final_states = utils.rowwise_lookup(states, self.lengths - 2)
-            final_states = states[:, -1, :]
-            combined = tf.concat(1, [self.latent, final_states])
-            lin1 = tf.nn.elu(utils.linear(combined, cfg.hidden_size, True, 0.0,
+            lin1 = tf.nn.elu(utils.linear(states[:, -1, :], cfg.hidden_size, True, 0.0,
                                           scope='discriminator_lin1'))
             output = utils.linear(lin1, 1, True, 0.0, scope='discriminator_output')
         return output
@@ -293,14 +215,14 @@ class EncoderDecoderModel(object):
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
                                          swap_memory=True, dtype=tf.float32,
                                          scope='discriminator_encoder')
-            # XXX use BiRNN+convnet for the encoder (try VAE first)
+            # XXX use BiRNN+convnet for the encoder
             # this latent is of size cfg.hidden_size since it needs a lot more capacity than
             # cfg.latent_size to reproduce the hidden states
             latent = utils.highway(state, layer_size=1)
             latent = utils.linear(latent, cfg.hidden_size, True,
                                   scope='discriminator_latent_transform')
-            # TODO make initial state from latent, don't just use zeros
             decoder_input = tf.concat(1, [tf.zeros([cfg.batch_size, 1, cfg.hidden_size]), states])
+            # TODO concatenate latent to decoder_input instead of passing it as below
             output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size, latent),
                                           decoder_input, swap_memory=True, dtype=tf.float32,
                                           scope='discriminator_decoder')
@@ -308,11 +230,7 @@ class EncoderDecoderModel(object):
             reconstructed = utils.linear(output, cfg.hidden_size, True, 0.0,
                                          scope='discriminator_reconst')
             reconstructed = tf.reshape(reconstructed, [cfg.batch_size, -1, cfg.hidden_size])
-            # don't train this projection, since the model can learn to zero out ret_latent to
-            # minimize the reconstruction error
-            ret_latent = tf.nn.tanh(utils.linear(self.latent, cfg.hidden_size, False,
-                                                 scope='discriminator_ret_latent', train=False))
-        return reconstructed, ret_latent
+        return reconstructed
 
     def gan_energy_loss(self, states, targets):
         '''Return the GAN energy loss. Put no variables here.'''
@@ -340,18 +258,15 @@ class EncoderDecoderModel(object):
         '''Generic training helper'''
         tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
         grads = tf.gradients(cost, tvars)
+        # XXX gradient clipping only for RNN variables?
         if cfg.max_grad_norm > 0:
             grads, _ = tf.clip_by_global_norm(grads, cfg.max_grad_norm)
         return optimizer.apply_gradients(zip(grads, tvars), global_step=global_step)
 
     def train_mle(self, cost):
         '''Training op for MLE mode.'''
-        return self._train(cost, '.*/(Embeddings|Encoder|Decoder|MLE_Softmax)', self.g_optimizer,
+        return self._train(cost, '.*/(Embeddings|Generator|MLE_Softmax)', self.g_optimizer,
                            self.global_step)
-
-    def train_mle_encoder(self, cost):
-        '''Encoder-only training op for MLE mode.'''
-        return self._train(cost, '.*/(Embeddings|Encoder)', self.g_optimizer, self.global_step)
 
     def train_d(self, cost):
         '''Training op for GAN mode, discriminator.'''
@@ -360,4 +275,4 @@ class EncoderDecoderModel(object):
     def train_g(self, cost):
         '''Training op for GAN mode, generator.'''
         # don't update embeddings, just update the generated distributions
-        return self._train(cost, '.*/(Transform_Latent|Decoder)', self.g_optimizer)
+        return self._train(cost, '.*/Generator', self.g_optimizer)

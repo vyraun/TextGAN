@@ -64,6 +64,7 @@ class Vocab(object):
 
 
 class Reader(object):
+    # TODO prepare non-overlapping datasets.
 
     def __init__(self, vocab):
         self.vocab = vocab
@@ -80,6 +81,7 @@ class Reader(object):
     def buffered_read_sorted_lines(self, fnames, batches=50):
         '''Read and return a list of lines (length multiple of batch_size) worth at most $batches
            number of batches sorted in length'''
+        # TODO allow not bucketing
         buffer_size = cfg.batch_size * batches
         lines = []
         for line in self.read_lines(fnames):
@@ -118,15 +120,6 @@ class Reader(object):
         '''Read batches from testing data'''
         yield from self.buffered_read([Path(cfg.data_path) / 'test.txt'])
 
-    def _word_dropout(self, sent):
-        ret = []
-        for word in sent:
-            if random.random() < cfg.word_dropout:
-                ret.append(self.vocab.unk_index)
-            else:
-                ret.append(word)
-        return ret
-
     def pack(self, batch):
         '''Pack python-list batches into numpy batches'''
         max_size = max(len(s) for s in batch)
@@ -135,13 +128,11 @@ class Reader(object):
         if len(batch) < cfg.batch_size:
             batch.extend([[] for _ in range(cfg.batch_size - len(batch))])
         leftalign_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
-        leftalign_drop_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
         sent_lengths = np.zeros([cfg.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
-            leftalign_drop_batch[i, :len(s)] = [s[0]] + self._word_dropout(s[1:-1]) + [s[-1]]
             sent_lengths[i] = len(s)
-        return (leftalign_batch, leftalign_drop_batch, sent_lengths)
+        return (leftalign_batch, sent_lengths)
 
 
 def main(_):

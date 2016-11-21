@@ -9,15 +9,13 @@ class Scheduler(object):
 
     '''Scheduler for GANs'''
 
-    def __init__(self, min_d_acc, max_d_acc, max_perp, min_kld_weight, list_size, decay):
+    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay):
         self.min_d_acc = min_d_acc
         self.max_d_acc = max_d_acc
         self.max_perp = max_perp
-        self.min_kld_weight = min_kld_weight
         self.list_size = list_size
         self.d_accs = []
         self.perps = []
-        self.kld_weight = 0.0
         coeffs = [1.0]
         for _ in range(list_size - 1):
             coeffs.append(coeffs[-1] * decay)
@@ -35,10 +33,6 @@ class Scheduler(object):
         if len(self.perps) > self.list_size:
             self.perps.pop()
 
-    def add_kld_weight(self, kld_weight):
-        '''Observe new KL divergence.'''
-        self.kld_weight = kld_weight
-
     def _current_perp(self):
         '''Smooth approximation of current perplexity.'''
         coeffs = self.coeffs.copy(order='K')
@@ -46,10 +40,6 @@ class Scheduler(object):
             coeffs = coeffs[:len(self.perps)]
             coeffs /= np.sum(coeffs)
         return np.sum(np.array(self.perps) * coeffs)
-
-    def _current_kld_weight(self):
-        '''Current KL divergence.'''
-        return self.kld_weight
 
     def _current_d_acc(self):
         '''Smooth approximation of current descriminator accuracy.'''
@@ -62,8 +52,7 @@ class Scheduler(object):
     def update_d(self):
         '''Whether or not to update the descriminator.'''
         if len(self.perps) < self.list_size or \
-           (self.max_perp > 0.0 and self._current_perp() > self.max_perp) or \
-           (self.min_kld_weight > 0.0 and self._current_kld_weight() < self.min_kld_weight):
+           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
             return False
         if len(self.d_accs) == 0 or self._current_d_acc() < self.max_d_acc:
             return True
@@ -73,8 +62,7 @@ class Scheduler(object):
     def update_g(self):
         '''Whether or not to update the generator.'''
         if len(self.perps) < self.list_size or \
-           (self.max_perp > 0.0 and self._current_perp() > self.max_perp) or \
-           (self.min_kld_weight > 0.0 and self._current_kld_weight() < self.min_kld_weight):
+           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
             return False
         d_acc = self._current_d_acc()
         if len(self.d_accs) > 0 and (d_acc < 0.0 or d_acc > self.min_d_acc):
@@ -146,6 +134,22 @@ def fix_word(word):
     return word
 
 
+def display_sentences(output, vocab, char_model):
+    '''Display sentences from indices.'''
+    for i, sent in enumerate(output):
+        print('Sentence %d:' % i, end=' ')
+        words = []
+        for word in sent:
+            if not word or word == vocab.eos_index:
+                break
+            words.append(vocab.vocab[word])
+        if char_model:
+            print(''.join(words))
+        else:
+            print(' '.join(words))
+    print()
+
+
 def read_words(line, chars):
     if chars:
         first = True
@@ -186,6 +190,19 @@ def get_optimizer(lr, name):
     elif name == 'adadelta':
         optimizer = tf.train.AdadeltaOptimizer(lr)
     return optimizer
+
+
+def list_all_variables(trainable=True, rest=False):
+    trainv = tf.trainable_variables()
+    if trainable:
+        print('\nTrainable:')
+        for v in trainv:
+            print(v.op.name)
+    if rest:
+        print('\nOthers:')
+        for v in tf.all_variables():
+            if v not in trainv:
+                print(v.op.name)
 
 
 def rowwise_lookup(params, indices):
