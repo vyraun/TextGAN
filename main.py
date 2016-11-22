@@ -13,8 +13,7 @@ import utils
 def call_mle_session(session, model, batch, use_gan):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.data: batch[0],
-              model.data_dropped: batch[1],
-              model.lengths: batch[2]}
+              model.lengths: batch[1]}
     ops = [model.nll, model.mle_cost]
     # training ops are tf.no_op() for a non-training model
     train_ops = [model.mle_train_op]
@@ -124,10 +123,9 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, vocab,
             n_words = max(int((np.sum(batch[0] == vocab.vocab_lookup[' ']) / cfg.batch_size) + 1),
                           1)
         else:
-            n_words = int(np.sum(batch[0] != 0) / cfg.batch_size)
+            n_words = np.sum(batch[0] != 0) // cfg.batch_size
         if scheduler is not None:
             scheduler.add_perp(np.exp(nll / n_words))
-            scheduler.add_kld_weight(kld_weight)
 
         nlls += nll
         mle_costs += mle_cost
@@ -174,7 +172,7 @@ def run_epoch(epoch, session, mle_model, gan_model, batch_loader, vocab,
 
         if gen_every > 0 and (step + 1) % gen_every == 0:
             for _ in range(cfg.gen_samples):
-                generate_sentences(session, vocab)
+                generate_sentences(session, mle_model, vocab)
 
         cur_iters = steps + step
         if saver is not None and cur_iters and cfg.save_every > 0 and \
@@ -234,9 +232,6 @@ def main(_):
             else:
                 print("You need to provide a valid model file for testing!")
                 sys.exit(1)
-
-        utils.list_all_variables()  # TODO remove
-        print(1 // 0)
 
         if cfg.training:
             steps = 0
