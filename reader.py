@@ -124,10 +124,10 @@ class Reader(object):
 
     def pack(self, batch):
         '''Pack python-list batches into numpy batches'''
-        leftalign_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
+        ret_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
         for i, s in enumerate(batch):
-            leftalign_batch[i, :len(s)] = s
-        return leftalign_batch
+            ret_batch[i, :len(s)] = s
+        return ret_batch
 
     def training(self):
         '''Read batches from training data'''

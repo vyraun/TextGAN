@@ -12,6 +12,7 @@ flags.DEFINE_string ("word_vocab_file", "data_short/wvocab.pk", "Word vocab pick
 flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab pickle file")
 
 flags.DEFINE_bool   ("char_model",        False,   "Character-level model")
+flags.DEFINE_bool   ("use_gan",           True,    "Use adversatial objectives")
 flags.DEFINE_integer("batch_size",        32,      "Batch size")
 flags.DEFINE_integer("word_emb_size",     256,     "Word embedding size")
 flags.DEFINE_integer("char_emb_size",     50,      "Character embedding size")
@@ -21,13 +22,13 @@ flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for ch
 flags.DEFINE_integer("softmax_samples",   2500,    "Number of classes to sample for softmax")
 flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
                                                    "than this")
-flags.DEFINE_float  ("max_d_acc",         0.95,    "Update descriminator if accuracy less than "
+flags.DEFINE_float  ("max_d_acc",         0.99,    "Update descriminator if accuracy less than "
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    200.0,   "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
 flags.DEFINE_integer("sc_list_size",      3,       "Number of previous prints to look at in "
                                                    "scheduler")
-flags.DEFINE_float  ("sc_decay",          0.25,    "Scheduler importance decay")
+flags.DEFINE_float  ("sc_decay",          0.2,     "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
 flags.DEFINE_bool   ("d_energy_based",    False,   "Energy-based discriminator")
 flags.DEFINE_float  ("d_word_eb_margin",  512.0,   "Margin for energy-based discriminator for word "
@@ -43,13 +44,10 @@ flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a sentence
 flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a sentence for char model")
 flags.DEFINE_float  ("max_grad_norm",     5.0,    "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
-flags.DEFINE_string ("mle_optimizer",     "adam",  "MLE optimizer to use (sgd, adam, adagrad, "
-                                                   "adadelta)")
 flags.DEFINE_string ("d_optimizer",       "adam",  "Discriminator optimizer to use (sgd, adam, "
                                                    "adagrad, adadelta)")
 flags.DEFINE_string ("g_optimizer",       "adam",  "Generator optimizer to use (sgd, adam, "
                                                    "adagrad, adadelta)")
-flags.DEFINE_float  ("mle_learning_rate", 1e-4,    "Optimizer initial learning rate for MLE")
 flags.DEFINE_float  ("d_learning_rate",   1e-4,    "Optimizer initial learning rate for "
                                                    "discriminator")
 flags.DEFINE_float  ("g_learning_rate",   1e-4,    "Optimizer initial learning rate for generator")
