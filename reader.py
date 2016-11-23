@@ -14,10 +14,9 @@ class Vocab(object):
     '''Stores the vocab: forward and reverse mappings'''
 
     def __init__(self):
-        self.vocab = ['<pad>', '<sos>', '<eos>', '<unk>']
+        self.vocab = ['<pad>', '<sos>', '<unk>']
         self.vocab_lookup = {w: i for i, w in enumerate(self.vocab)}
         self.sos_index = self.vocab_lookup.get('<sos>')
-        self.eos_index = self.vocab_lookup.get('<eos>')
         self.unk_index = self.vocab_lookup.get('<unk>')
 
     def load_by_parsing(self, save=False, verbose=True):
@@ -60,12 +59,10 @@ class Vocab(object):
                     print('Saved pickle file.')
 
     def lookup(self, words):
-        return [self.sos_index] + [self.vocab_lookup.get(w) for w in words] + [self.eos_index]
+        return [self.vocab_lookup.get(w) for w in words]
 
 
 class Reader(object):
-    # TODO prepare non-overlapping datasets.
-
     def __init__(self, vocab):
         self.vocab = vocab
         random.seed(0)  # deterministic random
@@ -78,61 +75,71 @@ class Reader(object):
                     yield self.vocab.lookup([w for w in utils.read_words(line,
                                                                          chars=cfg.char_model)])
 
-    def buffered_read_sorted_lines(self, fnames, batches=50):
-        '''Read and return a list of lines (length multiple of batch_size) worth at most $batches
-           number of batches sorted in length'''
-        # TODO allow not bucketing
-        buffer_size = cfg.batch_size * batches
+    def _prepare(self, lines):
+        '''Prepare non-overlapping data'''
+        seqs = []
+        seq = []
+        for line in lines:
+            line.insert(0, self.vocab.sos_index)
+            for word in line:
+                seq.append(word)
+                if len(seq) == cfg.max_sent_length:
+                    seqs.append(seq)
+                    seq = []
+        return seqs
+
+    def buffered_read(self, fnames, buffer_size=500):
+        '''Read and yield a list of non-overlapping sequences'''
+        buffer_size = max(buffer_size, cfg.max_sent_length)
         lines = []
         for line in self.read_lines(fnames):
             lines.append(line)
             if len(lines) == buffer_size:
-                lines.sort(key=lambda x: len(x))
-                yield lines
+                random.shuffle(lines)
+                yield self._prepare(lines)
                 lines = []
         if lines:
-            lines.sort(key=lambda x: len(x))
-            mod = len(lines) % cfg.batch_size
-            if mod != 0:
-                lines = [[self.vocab.sos_index, self.vocab.eos_index]
-                         for _ in range(cfg.batch_size - mod)] + lines
-            yield lines
+            random.shuffle(lines)
+            yield self._prepare(lines)
 
-    def buffered_read(self, fnames):
-        '''Read packed batches from data with each batch having lines of similar lengths'''
-        for line_collection in self.buffered_read_sorted_lines(fnames):
-            batches = [b for b in utils.grouper(cfg.batch_size, line_collection)]
+    def buffered_read_batches(self, fnames, buffer_size=500):
+        batches = []
+        batch = []
+        for lines in self.buffered_read(fnames):
+            for line in lines:
+                batch.append(line)
+                if len(batch) == cfg.batch_size:
+                    batches.append(self.pack(batch))
+                    if len(batches) == buffer_size:
+                        random.shuffle(batches)
+                        for batch in batches:
+                            yield batch
+                        batches = []
+                    batch = []
+        # ignore current incomplete batch
+        if batches:
             random.shuffle(batches)
             for batch in batches:
-                ret = self.pack(batch)
-                if ret is not None:
-                    yield ret
-
-    def training(self):
-        '''Read batches from training data'''
-        yield from self.buffered_read([Path(cfg.data_path) / 'train.txt'])
-
-    def validation(self):
-        '''Read batches from validation data'''
-        yield from self.buffered_read([Path(cfg.data_path) / 'valid.txt'])
-
-    def testing(self):
-        '''Read batches from testing data'''
-        yield from self.buffered_read([Path(cfg.data_path) / 'test.txt'])
+                yield batch
 
     def pack(self, batch):
         '''Pack python-list batches into numpy batches'''
-        max_size = max(len(s) for s in batch)
-        if max_size > cfg.max_sent_length:
-            return None
-        if len(batch) < cfg.batch_size:
-            batch.extend([[] for _ in range(cfg.batch_size - len(batch))])
         leftalign_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
-        sent_lengths = np.zeros([cfg.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
-            sent_lengths[i] = len(s)
-        return (leftalign_batch, sent_lengths)
+        return leftalign_batch
+
+    def training(self):
+        '''Read batches from training data'''
+        yield from self.buffered_read_batches([Path(cfg.data_path) / 'train.txt'])
+
+    def validation(self):
+        '''Read batches from validation data'''
+        yield from self.buffered_read_batches([Path(cfg.data_path) / 'valid.txt'])
+
+    def testing(self):
+        '''Read batches from testing data'''
+        yield from self.buffered_read_batches([Path(cfg.data_path) / 'test.txt'])
 
 
 def main(_):
@@ -142,13 +149,23 @@ def main(_):
     vocab.load_from_pickle()
 
     reader = Reader(vocab)
+    c = 0
+    w = 0
     for batch in reader.training():
-        for line in batch[0]:
+        n_words = np.sum(batch != 0)
+        w += n_words
+        c += len(batch)
+        for line in batch:
             print(line)
             for e in line:
-                print(vocab.vocab[e], end=' ')
+                if cfg.char_model:
+                    print(vocab.vocab[e], end='')
+                else:
+                    print(vocab.vocab[e], end=' ')
             print()
             print()
+    print('Total lines:', c)
+    print('Total words:', w)
 
 
 if __name__ == '__main__':
