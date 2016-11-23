@@ -14,7 +14,7 @@ class Vocab(object):
     '''Stores the vocab: forward and reverse mappings'''
 
     def __init__(self):
-        self.vocab = ['<pad>', '<sos>', '<unk>']
+        self.vocab = ['<sos>', '<unk>']
         self.vocab_lookup = {w: i for i, w in enumerate(self.vocab)}
         self.sos_index = self.vocab_lookup.get('<sos>')
         self.unk_index = self.vocab_lookup.get('<unk>')
