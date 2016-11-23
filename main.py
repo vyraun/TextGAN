@@ -58,6 +58,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
     gan_steps = 0
     update_d = False
     update_g = False
+    update_gan = False
 
     for step, batch in enumerate(batch_loader):
         if scheduler is not None:
