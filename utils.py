@@ -91,7 +91,7 @@ def display_sentences(output, vocab, char_model):
     for i, sent in enumerate(output):
         print('Sentence %d:' % i, end=' ')
         for word in sent:
-            print(word, end=space)
+            print(vocab.vocab[word], end=space)
         print()
     print()
 

@@ -27,8 +27,8 @@ class RNNLMModel(object):
 
         embs = self.word_embeddings(self.data)
         output, mle_states, _ = self.generator(embs, True)
+        _, gan_states, self.generated = self.generator(embs, False, True)
         if use_gan:
-            _, gan_states, self.generated = self.generator(embs, False, True)
             states = tf.concat(0, [mle_states, gan_states])
 
             if cfg.d_energy_based:
@@ -47,8 +47,8 @@ class RNNLMModel(object):
                 self.d_cost = tf.reduce_sum(gan_loss) / (2 * cfg.batch_size)
                 self.g_cost = -self.d_cost
         else:
-            self.d_cost = 0.0
-            self.g_cost = 0.0
+            self.d_cost = tf.zeros([])
+            self.g_cost = tf.zeros([])
 
         # shift left the input to get the targets
         targets = tf.concat(1, [self.data[:, 1:], tf.zeros([cfg.batch_size, 1], tf.int32)])

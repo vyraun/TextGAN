@@ -130,9 +130,10 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
             shortterm_steps = 0
             g_steps = 0
             d_steps = 0
+            gan_steps = 0
             start_time = time.time()
 
-        if use_gan and gen_every > 0 and (step + 1) % gen_every == 0:
+        if gen_every > 0 and (step + 1) % gen_every == 0:
             for _ in range(cfg.gen_samples):
                 generate_sentences(session, model, vocab)
 
@@ -144,7 +145,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
         if max_steps > 0 and cur_iters >= max_steps:
             break
 
-    if use_gan and gen_every < 0:
+    if gen_every < 0:
         for _ in range(cfg.gen_samples):
             generate_sentences(session, model, vocab)
 
