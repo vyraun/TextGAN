@@ -40,9 +40,9 @@ flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for dis
 flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")
 flags.DEFINE_integer("d_conv_window",     5,       "Convolution window for convolution on "
                                                    "discriminative RNN's states")
-flags.DEFINE_integer("word_sent_length",  50,      "Maximum length of a sentence for word model")
-flags.DEFINE_integer("char_sent_length",  300,     "Maximum length of a sentence for char model")
-flags.DEFINE_float  ("max_grad_norm",     5.0,    "Gradient clipping")
+flags.DEFINE_integer("word_sent_length",  100,     "Maximum length of a sentence for word model")
+flags.DEFINE_integer("char_sent_length",  500,     "Maximum length of a sentence for char model")
+flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("d_optimizer",       "adam",  "Discriminator optimizer to use (sgd, adam, "
                                                    "adagrad, adadelta)")

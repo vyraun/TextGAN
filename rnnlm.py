@@ -144,7 +144,7 @@ class RNNLMModel(object):
         '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
         with tf.variable_scope("Discriminator"):
             if cfg.d_rnn_bidirect:
-                hidden_size = cfg.hidden_size // 2
+                hidden_size = cfg.hidden_size
                 fcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
                 bcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
                 seq_lengths = [cfg.max_sent_length] * (2 * cfg.batch_size)
@@ -152,7 +152,7 @@ class RNNLMModel(object):
                                                              sequence_length=seq_lengths,
                                                              swap_memory=True, dtype=tf.float32)
             else:
-                hidden_size = cfg.hidden_size
+                hidden_size = cfg.hidden_size * 2
                 cell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
                 outputs, _ = tf.nn.dynamic_rnn(cell, states, swap_memory=True, dtype=tf.float32)
                 outputs = (outputs,)  # to match bidirectional RNN's output format
@@ -184,11 +184,11 @@ class RNNLMModel(object):
     def discriminator_finalstate(self, states):
         '''Discriminator that operates on the final states of the sentences.'''
         with tf.variable_scope("Discriminator"):
-            # indices = lengths - 2, since the generated output skips <sos>
-            #final_states = utils.rowwise_lookup(states, self.lengths - 2)
             lin1 = tf.nn.elu(utils.linear(states[:, -1, :], cfg.hidden_size, True, 0.0,
                                           scope='discriminator_lin1'))
-            output = utils.linear(lin1, 1, True, 0.0, scope='discriminator_output')
+            lin2 = tf.nn.elu(utils.linear(lin1, cfg.hidden_size // 2, True, 0.0,
+                                          scope='discriminator_lin2'))
+            output = utils.linear(lin2, 1, True, 0.0, scope='discriminator_output')
         return output
 
     def discriminator_energy(self, states):
@@ -199,7 +199,7 @@ class RNNLMModel(object):
                                          scope='discriminator_encoder')
             # XXX use BiRNN+convnet for the encoder
             # this latent needs a more capacity than to reproduce the hidden states
-            latent_size = cfg.hidden_size // 10
+            latent_size = cfg.hidden_size // 5
             latent = tf.nn.elu(utils.linear(state, latent_size, True,
                                             scope='discriminator_latent_transform'))
             latent = utils.highway(latent, layer_size=2, f=tf.nn.elu)
