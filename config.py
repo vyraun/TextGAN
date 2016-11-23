@@ -24,7 +24,7 @@ flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descrimi
                                                    "than this")
 flags.DEFINE_float  ("max_d_acc",         0.99,    "Update descriminator if accuracy less than "
                                                    "this")
-flags.DEFINE_float  ("max_perplexity",    200.0,   "Scheduler maintains perplexity to be under "
+flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
 flags.DEFINE_integer("sc_list_size",      3,       "Number of previous prints to look at in "
                                                    "scheduler")

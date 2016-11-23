@@ -66,13 +66,12 @@ class RNNLMModel(object):
             self.g_train_op = tf.no_op()
 
     def rnn_cell(self, num_layers, hidden_size, embedding=None, softmax_w=None, softmax_b=None,
-                 return_states=False):
+                 return_states=False, pretanh=False):
         '''Return a multi-layer RNN cell.'''
-        # TODO return pre-tanh states from GRU
-        return rnncell.MultiRNNCell([tf.nn.rnn_cell.GRUCell(hidden_size)
+        return rnncell.MultiRNNCell([rnncell.GRUCell(hidden_size, pretanh=pretanh)
                                      for _ in range(num_layers)], embedding=embedding,
                                     softmax_w=softmax_w, softmax_b=softmax_b,
-                                    return_states=return_states)
+                                    return_states=return_states, pretanh=pretanh)
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''
@@ -101,10 +100,12 @@ class RNNLMModel(object):
         '''Use the word inputs to predict next words.'''
         with tf.variable_scope("Generator", reuse=reuse):
             if mle_mode:
-                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True)
+                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True,
+                                     pretanh=True)
             else:
                 cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, self.embedding,
-                                     self.softmax_w, self.softmax_b, return_states=True)
+                                     self.softmax_w, self.softmax_b, return_states=True,
+                                     pretanh=True)
             outputs, _ = tf.nn.dynamic_rnn(cell, inputs, swap_memory=True, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
             if mle_mode:
@@ -112,12 +113,10 @@ class RNNLMModel(object):
                 skip = 0
             else:
                 generated = tf.squeeze(tf.cast(tf.slice(outputs, [0, 0, cfg.hidden_size],
-                                                        [-1, cfg.max_sent_length - 1, 1]),
+                                                        [-1, -1, 1]),
                                                tf.int32), [-1])
                 skip = 1
             states = tf.slice(outputs, [0, 0, cfg.hidden_size + skip], [-1, -1, -1])
-            # for GRU, we skipped the last layer states because they're the outputs
-            states = tf.concat(2, [states, output])
         return output, states, generated
 
     def mle_loss(self, outputs, targets):

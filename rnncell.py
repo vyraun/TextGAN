@@ -3,12 +3,52 @@ import tensorflow as tf
 import utils
 
 
+class GRUCell(tf.nn.rnn_cell.RNNCell):
+
+    """Gated Recurrent Unit cell (cf. http://arxiv.org/abs/1406.1078)."""
+
+    def __init__(self, num_units, pretanh=False, activation=tf.nn.tanh):
+        self.num_units = num_units
+        self.pretanh = pretanh
+        self.activation = activation
+
+    @property
+    def state_size(self):
+        if self.pretanh:
+            return 2 * self.num_units
+        else:
+            return self.num_units
+
+    @property
+    def output_size(self):
+        return self.num_units
+
+    def __call__(self, inputs, state, scope=None):
+        """Gated recurrent unit (GRU) with nunits cells."""
+        with tf.variable_scope(scope or type(self).__name__):  # "GRUCell"
+            if self.pretanh:
+                state = state[:, :self.num_units]
+            with tf.variable_scope("Gates"):  # Reset gate and update gate.
+                # We start with bias of 1.0 to not reset and not update.
+                r, u = tf.split(1, 2, utils.linear([inputs, state], 2 * self.num_units, True, 1.0))
+                r, u = tf.nn.sigmoid(r), tf.nn.sigmoid(u)
+            with tf.variable_scope("Candidate"):
+                preact = utils.linear([inputs, r * state], self.num_units, True)
+                c = self.activation(preact)
+            new_h = u * state + (1 - u) * c
+        if self.pretanh:
+            new_state = tf.concat(1, [new_h, preact])
+        else:
+            new_state = new_h
+        return new_h, new_state
+
+
 class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
 
     """RNN cell composed sequentially of multiple simple cells."""
 
     def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None, return_states=False,
-                 outputs_are_states=True):
+                 outputs_are_states=True, pretanh=False):
         """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
            None, the output of the previous timestep is used for the current time step using the
            softmax variables.
@@ -24,6 +64,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.softmax_b = softmax_b
         self.return_states = return_states
         self.outputs_are_states = outputs_are_states  # should be true for GRUs
+        self.pretanh = pretanh
         if embedding is not None:
             self.emb_size = embedding.get_shape()[1]
         else:
@@ -39,12 +80,15 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
     @property
     def output_size(self):
         size = self.cells[-1].output_size
-        if self.outputs_are_states:
-            skip = 1
-        else:
-            skip = 0
         if self.return_states:
-            size += sum(cell.state_size for cell in self.cells[:-skip])
+            if not self.pretanh and self.outputs_are_states:
+                skip = 1
+            else:
+                skip = 0
+            if self.pretanh:
+                size += sum(cell.state_size // 2 for cell in self.cells)
+            else:
+                size += sum(cell.state_size for cell in self.cells[:-skip])
         if self.emb_size:
             size += 1  # for the current timestep prediction
         return size
@@ -64,6 +108,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             else:
                 cur_inp = inputs
             new_states = []
+            if self.return_states:
+                ret_states = []
             for i, cell in enumerate(self.cells):
                 with tf.variable_scope("Layer%d" % i):
                     if not tf.nn.nest.is_sequence(state):
@@ -72,6 +118,12 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                     cur_state = state[i]
                     cur_inp, new_state = cell(cur_inp, cur_state)
                     new_states.append(new_state)
+                    if self.return_states:
+                        if self.pretanh:
+                            size = new_state.get_shape()[1]
+                            ret_states.append(new_state[:, size // 2:])
+                        else:
+                            ret_states.append(new_state)
             if self.embedding is not None:
                 logits = tf.nn.bias_add(tf.matmul(cur_inp, tf.transpose(self.softmax_w),
                                                   name='Softmax_transform'),
@@ -87,12 +139,10 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         if self.return_states:
             output = [cur_inp]
             if self.embedding is not None:
-                skip = 2
                 output.append(tf.cast(tf.expand_dims(prediction, -1), tf.float32))
-            else:
-                skip = 0
-            if self.outputs_are_states:  # skip the last layer states, since they're outputs
-                skip += 1
-            return tf.concat(1, output + new_states[:-skip]), tuple(new_states)
+            if not self.pretanh and self.outputs_are_states:
+                # skip the last layer states, since they're outputs
+                ret_states = ret_states[:-1]
+            return tf.concat(1, output + ret_states), tuple(new_states)
         else:
             return cur_inp, tuple(new_states)
