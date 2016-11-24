@@ -66,12 +66,13 @@ class RNNLMModel(object):
             self.g_train_op = tf.no_op()
 
     def rnn_cell(self, num_layers, hidden_size, embedding=None, softmax_w=None, softmax_b=None,
-                 return_states=False, pretanh=False):
+                 return_states=False, pretanh=False, get_embeddings=False):
         '''Return a multi-layer RNN cell.'''
         return rnncell.MultiRNNCell([rnncell.GRUCell(hidden_size, pretanh=pretanh)
                                      for _ in range(num_layers)], embedding=embedding,
                                     softmax_w=softmax_w, softmax_b=softmax_b,
-                                    return_states=return_states, pretanh=pretanh)
+                                    return_states=return_states, pretanh=pretanh,
+                                    get_embeddings=get_embeddings)
 
     def word_embedding_matrix(self):
         '''Define the word embedding matrix.'''
@@ -105,7 +106,7 @@ class RNNLMModel(object):
             else:
                 cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, self.embedding,
                                      self.softmax_w, self.softmax_b, return_states=True,
-                                     pretanh=True)
+                                     pretanh=True, get_embeddings=cfg.concat_inputs)
             outputs, _ = tf.nn.dynamic_rnn(cell, inputs, swap_memory=True, dtype=tf.float32)
             output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
             if mle_mode:
@@ -116,15 +117,23 @@ class RNNLMModel(object):
                                                         [-1, -1, 1]),
                                                tf.int32), [-1])
                 skip = 1
+                if cfg.concat_inputs:
+                    embeddings = tf.slice(outputs, [0, 0, cfg.hidden_size + 1],
+                                          [-1, -1, cfg.emb_size])
+                    embeddings = tf.concat(1, [inputs[:, :1, :], embeddings[:, :-1, :]])
+                    skip += cfg.emb_size
             states = tf.slice(outputs, [0, 0, cfg.hidden_size + skip], [-1, -1, -1])
+            if cfg.concat_inputs:
+                if mle_mode:
+                    states = tf.concat(2, [states, inputs])
+                else:
+                    states = tf.concat(2, [states, embeddings])
         return output, states, generated
 
     def mle_loss(self, outputs, targets):
         '''Maximum likelihood estimation loss.'''
-        present_mask = tf.greater(targets, 0, name='present_mask')
         # don't enfoce loss on true <unk>'s, makes the reported perlexity slightly overestimated
-        unk_mask = tf.not_equal(targets, self.vocab.unk_index, name='unk_mask')
-        mask = tf.cast(tf.logical_and(present_mask, unk_mask), tf.float32)
+        mask = tf.cast(tf.not_equal(targets, self.vocab.unk_index, name='unk_mask'), tf.float32)
         output = tf.reshape(tf.concat(1, outputs), [-1, cfg.hidden_size])
         if self.training and cfg.softmax_samples < len(self.vocab.vocab):
             targets = tf.reshape(targets, [-1, 1])
@@ -177,8 +186,8 @@ class RNNLMModel(object):
             conv_out = tf.reshape(conv, [2 * cfg.batch_size, -1,
                                          cfg.hidden_size // cfg.d_conv_window])
             conv_out = tf.nn.elu(tf.nn.bias_add(conv_out, b_conv))
-            reduced = tf.reduce_mean(conv_out, [1])
-            output = utils.linear(reduced, 1, True, 0.0, scope='discriminator_output')
+            conv_out = tf.reshape(conv_out, [2 * cfg.batch_size, -1])
+            output = utils.linear(conv_out, 1, True, 0.0, scope='discriminator_output')
         return output
 
     def discriminator_finalstate(self, states):

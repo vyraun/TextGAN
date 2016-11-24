@@ -100,7 +100,7 @@ def read_words(line, chars):
     if chars:
         first = True
     for word in line.split():
-        if word != '<unk>':
+        if word != '<unk>' and not chars:
             word = fix_word(word)
         if word:
             if chars:

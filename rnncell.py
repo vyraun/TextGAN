@@ -48,7 +48,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
     """RNN cell composed sequentially of multiple simple cells."""
 
     def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None, return_states=False,
-                 outputs_are_states=True, pretanh=False):
+                 outputs_are_states=True, pretanh=False, get_embeddings=False):
         """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
            None, the output of the previous timestep is used for the current time step using the
            softmax variables.
@@ -65,6 +65,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         self.return_states = return_states
         self.outputs_are_states = outputs_are_states  # should be true for GRUs
         self.pretanh = pretanh
+        self.get_embeddings = get_embeddings
         if embedding is not None:
             self.emb_size = embedding.get_shape()[1]
         else:
@@ -89,6 +90,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 size += sum(cell.state_size // 2 for cell in self.cells)
             else:
                 size += sum(cell.state_size for cell in self.cells[:-skip])
+            if self.get_embeddings:
+                size += self.embedding.get_shape()[1].value
         if self.emb_size:
             size += 1  # for the current timestep prediction
         return size
@@ -135,6 +138,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                     embeddings = tf.nn.embedding_lookup(self.embedding, prediction,
                                                         name='rnn_embedding_k1')
                 new_states.append(embeddings)
+                if self.return_states and self.get_embeddings:
+                    ret_states.insert(0, embeddings)
                 new_states.append(tf.ones([inputs.get_shape()[0], 1]))  # we have valid prev input
         if self.return_states:
             output = [cur_inp]

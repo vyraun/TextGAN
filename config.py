@@ -13,13 +13,15 @@ flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab
 
 flags.DEFINE_bool   ("char_model",        False,   "Character-level model")
 flags.DEFINE_bool   ("use_gan",           True,    "Use adversatial objectives")
-flags.DEFINE_integer("batch_size",        32,      "Batch size")
+flags.DEFINE_integer("batch_size",        32,      "Batch size")  # TODO search for largest for HPC
 flags.DEFINE_integer("word_emb_size",     256,     "Word embedding size")
-flags.DEFINE_integer("char_emb_size",     50,      "Character embedding size")
+flags.DEFINE_integer("char_emb_size",     96,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
-flags.DEFINE_integer("char_hidden_size",  1024,    "RNN hidden state size for char model")
-flags.DEFINE_integer("softmax_samples",   2500,    "Number of classes to sample for softmax")
+flags.DEFINE_integer("char_hidden_size",  768,     "RNN hidden state size for char model")
+flags.DEFINE_integer("softmax_samples",   1024,    "Number of classes to sample for softmax")
+flags.DEFINE_bool   ("concat_inputs",     True,    "Concatenate inputs to states before "
+                                                   "discriminating")
 flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
                                                    "than this")
 flags.DEFINE_float  ("max_d_acc",         0.99,    "Update descriminator if accuracy less than "
@@ -40,8 +42,8 @@ flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for dis
 flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")
 flags.DEFINE_integer("d_conv_window",     5,       "Convolution window for convolution on "
                                                    "discriminative RNN's states")
-flags.DEFINE_integer("word_sent_length",  100,     "Maximum length of a sentence for word model")
-flags.DEFINE_integer("char_sent_length",  500,     "Maximum length of a sentence for char model")
+flags.DEFINE_integer("word_sent_length",  192,     "Maximum length of a sentence for word model")
+flags.DEFINE_integer("char_sent_length",  480,     "Maximum length of a sentence for char model")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("d_optimizer",       "adam",  "Discriminator optimizer to use (sgd, adam, "
