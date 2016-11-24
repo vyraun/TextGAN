@@ -13,8 +13,8 @@ flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab
 
 flags.DEFINE_bool   ("char_model",        False,   "Character-level model")
 flags.DEFINE_bool   ("use_gan",           True,    "Use adversatial objectives")
-flags.DEFINE_integer("batch_size",        32,      "Batch size")  # TODO search for largest for HPC
-flags.DEFINE_integer("word_emb_size",     256,     "Word embedding size")
+flags.DEFINE_integer("batch_size",        48,      "Batch size")
+flags.DEFINE_integer("word_emb_size",     224,     "Word embedding size")
 flags.DEFINE_integer("char_emb_size",     96,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
 flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
