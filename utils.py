@@ -83,58 +83,6 @@ class Scheduler(object):
             return False
 
 
-class LearningRateTracker(object):
-
-    '''Keep track of the current learning rates so as to only do session updates when necessary.'''
-
-    def __init__(self, session, g_lr, d_lr, g_mle=True):
-        self.session = session
-        self.g_lr = g_lr
-        self.d_lr = d_lr
-        self.mle_lr_value = 0.
-        self.g_lr_value = 0.
-        self.d_lr_value = 0.
-        self.g_mle = g_mle
-
-    def _set_g_lr(self, value):
-        self.session.run(tf.assign(self.g_lr, value))
-
-    def _set_d_lr(self, value):
-        self.session.run(tf.assign(self.d_lr, value))
-
-    def update_mle_lr(self, value):
-        if self.mle_lr_value != value:
-            print('Changing MLE learning rate to', value)
-            if self.g_mle:
-                self._set_g_lr(value)
-            self.mle_lr_value = value
-
-    def update_g_lr(self, value):
-        if self.g_lr_value != value:
-            print('Changing generator learning rate to', value)
-            if not self.g_mle:
-                self._set_g_lr(value)
-            self.g_lr_value = value
-
-    def update_d_lr(self, value):
-        if self.d_lr_value != value:
-            print('Changing discriminator learning rate to', value)
-            self._set_d_lr(value)
-            self.d_lr_value = value
-
-    def mle_mode(self):
-        if not self.g_mle:
-            self.g_mle = True
-            if self.g_lr_value != self.mle_lr_value:
-                self._set_g_lr(self.mle_lr_value)
-
-    def gan_mode(self):
-        if self.g_mle:
-            self.g_mle = False
-            if self.g_lr_value != self.mle_lr_value:
-                self._set_g_lr(self.g_lr_value)
-
-
 fix_re = re.compile(r'''[^a-z0-9"'?.,]+''')
 num_re = re.compile(r'[0-9]+')
 
@@ -146,11 +94,25 @@ def fix_word(word):
     return word
 
 
+def display_sentences(output, vocab, char_model):
+    '''Display sentences from indices.'''
+    if char_model:
+        space = ''
+    else:
+        space = ' '
+    for i, sent in enumerate(output):
+        print('Sentence %d:' % i, end=' ')
+        for word in sent:
+            print(vocab.vocab[word], end=space)
+        print()
+    print()
+
+
 def read_words(line, chars):
     if chars:
         first = True
     for word in line.split():
-        if word != '<unk>':
+        if word != '<unk>' and not chars:
             word = fix_word(word)
         if word:
             if chars:
@@ -186,6 +148,19 @@ def get_optimizer(lr, name):
     elif name == 'adadelta':
         optimizer = tf.train.AdadeltaOptimizer(lr)
     return optimizer
+
+
+def list_all_variables(trainable=True, rest=False):
+    trainv = tf.trainable_variables()
+    if trainable:
+        print('\nTrainable:')
+        for v in trainv:
+            print(v.op.name)
+    if rest:
+        print('\nOthers:')
+        for v in tf.all_variables():
+            if v not in trainv:
+                print(v.op.name)
 
 
 def rowwise_lookup(params, indices):
