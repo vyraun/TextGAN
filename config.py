@@ -13,6 +13,7 @@ flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab
 
 flags.DEFINE_bool   ("char_model",        True,    "Character-level model")
 flags.DEFINE_bool   ("use_gan",           True,    "Use adversarial objectives")
+flags.DEFINE_bool   ("enc_bidirect",      True,    "Use a bidirectional encoder")
 flags.DEFINE_integer("batch_size",        32,      "Batch size")
 flags.DEFINE_integer("word_emb_size",     224,     "Word embedding size")
 flags.DEFINE_integer("char_emb_size",     96,      "Character embedding size")

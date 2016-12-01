@@ -134,8 +134,8 @@ class Reader(object):
             return None
         if len(batch) < cfg.batch_size:
             batch.extend([[] for _ in range(cfg.batch_size - len(batch))])
-        leftalign_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
-        leftalign_drop_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
+        leftalign_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
+        leftalign_drop_batch = np.zeros([cfg.batch_size, max_size], dtype=np.int32)
         sent_lengths = np.zeros([cfg.batch_size], dtype=np.int32)
         for i, s in enumerate(batch):
             leftalign_batch[i, :len(s)] = s
