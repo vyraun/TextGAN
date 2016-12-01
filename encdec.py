@@ -131,22 +131,22 @@ class EncoderDecoderModel(object):
         '''Encode sentence and return a latent representation in MLE mode.'''
         with tf.variable_scope("Encoder"):
             if cfg.enc_bidirect:
-                fcell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True,
-                                      pretanh=True)
-                bcell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True,
-                                      pretanh=True)
+                fcell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True)
+                bcell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True)
                 outputs, _ = tf.nn.bidirectional_dynamic_rnn(fcell, bcell, inputs,
                                                              sequence_length=self.lengths,
                                                              swap_memory=True, dtype=tf.float32)
             else:
-                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True,
-                                     pretanh=True)
+                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True)
                 outputs, _ = tf.nn.dynamic_rnn(cell, inputs, swap_memory=True, dtype=tf.float32)
                 outputs = (outputs,)  # to match bidirectional RNN's output format
             states = []
             for out in outputs:
-                states.append(out[:, :, cfg.hidden_size:])
-            states = tf.concat(2, states)  # concatenated pretanh states from fwd and bwd RNNs
+                output = out[:, :, :cfg.hidden_size]
+                d_states = out[:, :, cfg.hidden_size:]
+                # for GRU, we skipped the last layer states because they're the outputs
+                states.append(tf.concat(2, [d_states, output]))
+            states = tf.concat(2, states)  # concatenated states from fwd and bwd RNNs
             states = tf.reshape(states, [-1, cfg.hidden_size * len(outputs)])
             states = utils.linear(states, cfg.latent_size, True, 0.0, scope='states_transform')
             states = utils.highway(states, f=tf.nn.elu)
@@ -157,7 +157,7 @@ class EncoderDecoderModel(object):
             z_logvar = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_logvar')
         return z_mean, z_logvar
 
-    def decoder(self, inputs, mle_mode, reuse):
+    def decoder(self, inputs, mle_mode, reuse=None):
         '''Use the latent representation and word inputs to predict next words.'''
         with tf.variable_scope("Decoder", reuse=reuse):
             latent = utils.highway(self.latent, layer_size=2, f=tf.nn.elu)
@@ -176,8 +176,7 @@ class EncoderDecoderModel(object):
                                      self.softmax_w, self.softmax_b, return_states=True,
                                      pretanh=True, get_embeddings=cfg.concat_inputs)
             outputs, _ = tf.nn.dynamic_rnn(cell, inputs, initial_state=cell.initial_state(initial),
-                                           sequence_length=self.lengths-1, swap_memory=True,
-                                           dtype=tf.float32)
+                                           swap_memory=True, dtype=tf.float32)
             output = outputs[:, :, :cfg.hidden_size]
             if mle_mode:
                 generated = None
@@ -242,11 +241,9 @@ class EncoderDecoderModel(object):
                                                            scope='Latent_initial%d' % i)))
                 initialf = fcell.initial_state(initial[:cfg.d_num_layers])
                 initialb = bcell.initial_state(initial[cfg.d_num_layers:])
-                seq_lengths = [cfg.max_sent_length] * (2 * cfg.batch_size)  # TODO what? no.
                 outputs, _ = tf.nn.bidirectional_dynamic_rnn(fcell, bcell, states,
                                                              initial_state_fw=initialf,
                                                              initial_state_bw=initialb,
-                                                             sequence_length=seq_lengths,
                                                              swap_memory=True, dtype=tf.float32)
             else:
                 hidden_size = cfg.hidden_size * 2
