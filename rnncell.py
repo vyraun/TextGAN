@@ -47,9 +47,9 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
 
     """RNN cell composed sequentially of multiple simple cells."""
 
-    def __init__(self, cells, embedding=None, softmax_w=None, softmax_b=None, return_states=False,
-                 outputs_are_states=True, pretanh=False, get_embeddings=False, softmax_top_k=-1,
-                 use_argmax=False):
+    def __init__(self, cells, latent=None, embedding=None, softmax_w=None, softmax_b=None,
+                 return_states=False, outputs_are_states=True, pretanh=False, get_embeddings=False,
+                 softmax_top_k=-1, use_argmax=False):
         """Create a RNN cell composed sequentially of a number of RNNCells. If embedding is not
            None, the output of the previous timestep is used for the current time step using the
            softmax variables.
@@ -60,6 +60,7 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         if not (embedding is None and softmax_w is None and softmax_b is None) and \
            not (embedding is not None and softmax_w is not None and softmax_b is not None):
             raise ValueError('Embedding and softmax variables have to all be None or all not None.')
+        self.latent = latent
         self.embedding = embedding
         self.softmax_w = softmax_w
         self.softmax_b = softmax_b
@@ -133,6 +134,8 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(scope or type(self).__name__):  # "MultiRNNCell"
             if self.embedding is not None:
                 cur_inp = tf.select(tf.greater(state[-1][:, 0], 0.5), state[-2], inputs)
+                if self.latent is not None:
+                    cur_inp = tf.concat(1, [cur_inp, self.latent])
             else:
                 cur_inp = inputs
             new_states = []
@@ -159,14 +162,15 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
                 if self.use_argmax:
                     prediction = tf.argmax(logits, 1)
                 else:  # TODO implement a truncated sample (from, say, top 3)
-                    logits = tf.nn.log_softmax(logits)
-                    dist = tf.contrib.distributions.Categorical(logits)
+                    logits_ = tf.nn.log_softmax(logits)
+                    dist = tf.contrib.distributions.Categorical(logits_)
                     prediction = tf.cast(dist.sample(), tf.int64)
                 embeddings = self.expected_embedding(logits, prediction)
                 new_states.append(embeddings)
                 if self.return_states and self.get_embeddings:
                     ret_states.insert(0, embeddings)
-                new_states.append(tf.ones([inputs.get_shape()[0], 1]))  # we have valid prev input
+                # we have valid prev input
+                new_states.append(tf.ones([inputs.get_shape()[0].value, 1]))
         if self.return_states:
             output = [cur_inp]
             if self.embedding is not None:

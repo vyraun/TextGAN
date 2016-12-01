@@ -91,15 +91,15 @@ class EncoderDecoderModel(object):
             self.d_train_op = tf.no_op()
             self.g_train_op = tf.no_op()
 
-    def rnn_cell(self, num_layers, hidden_size, embedding=None, softmax_w=None,
+    def rnn_cell(self, num_layers, hidden_size, latent=None, embedding=None, softmax_w=None,
                  softmax_b=None, return_states=False, pretanh=False, get_embeddings=False):
         '''Return a multi-layer RNN cell.'''
         softmax_top_k = cfg.generator_top_k
         if softmax_top_k > 0 and len(self.vocab.vocab) <= softmax_top_k:
             softmax_top_k = -1
         return rnncell.MultiRNNCell([rnncell.GRUCell(hidden_size, pretanh=pretanh)
-                                     for _ in range(num_layers)], embedding=embedding,
-                                    softmax_w=softmax_w, softmax_b=softmax_b,
+                                     for _ in range(num_layers)], latent=latent,
+                                    embedding=embedding, softmax_w=softmax_w, softmax_b=softmax_b,
                                     return_states=return_states, softmax_top_k=softmax_top_k,
                                     use_argmax=cfg.generate_argmax, pretanh=pretanh,
                                     get_embeddings=get_embeddings)
@@ -166,13 +166,13 @@ class EncoderDecoderModel(object):
             for i in range(cfg.num_layers):
                 initial.append(tf.nn.tanh(utils.linear(latent, cfg.hidden_size, True, 0.0,
                                                        scope='Latent_initial%d' % i)))
-            inputs = tf.concat(2, [inputs, tf.tile(tf.expand_dims(latent, 1),
-                                                   tf.pack([1, tf.shape(inputs)[1], 1]))])
             if mle_mode:
+                inputs = tf.concat(2, [inputs, tf.tile(tf.expand_dims(latent, 1),
+                                                       tf.pack([1, tf.shape(inputs)[1], 1]))])
                 cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True,
                                      pretanh=True)
             else:
-                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, self.embedding,
+                cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, latent, self.embedding,
                                      self.softmax_w, self.softmax_b, return_states=True,
                                      pretanh=True, get_embeddings=cfg.concat_inputs)
             outputs, _ = tf.nn.dynamic_rnn(cell, inputs, initial_state=cell.initial_state(initial),
