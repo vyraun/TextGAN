@@ -164,8 +164,10 @@ class EncoderDecoderModel(object):
             latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
             initial = []
             for i in range(cfg.num_layers):
-                initial.append(tf.nn.tanh(utils.linear(latent, cfg.hidden_size, True, 0.0,
-                                                       scope='Latent_initial%d' % i)))
+                preact = utils.linear(latent, cfg.hidden_size, True, 0.0,
+                                      scope='Latent_initial%d' % i)
+                act = tf.nn.tanh(preact)
+                initial.append(tf.concat(1, [act, preact]))
             if mle_mode:
                 inputs = tf.concat(2, [inputs, tf.tile(tf.expand_dims(latent, 1),
                                                        tf.pack([1, tf.shape(inputs)[1], 1]))])
