@@ -149,7 +149,7 @@ class EncoderDecoderModel(object):
             states = tf.concat(2, states)  # concatenated states from fwd and bwd RNNs
             states = tf.reshape(states, [-1, cfg.hidden_size * len(outputs)])
             states = utils.linear(states, cfg.latent_size, True, 0.0, scope='states_transform1')
-            states = tf.nn.elu(states)
+            states = utils.highway(states, f=tf.nn.elu)
             states = utils.linear(states, cfg.latent_size, True, 0.0, scope='states_transform2')
             states = tf.reshape(states, [cfg.batch_size, -1, cfg.latent_size])
             latent = tf.nn.tanh(tf.reduce_sum(states, [1]))
