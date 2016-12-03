@@ -56,19 +56,15 @@ def beam_decode_op(model, vocab, beam_size):
 
 def generate_sentences(session, model, decode_op, vocab, latent, true_output):
     '''Generate sentences using the generator.'''
-    # TODO for MAP inference, use beam search
-    # XXX uncond:
-    #f_dict = {model.data: np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)}
-    #utils.display_sentences(session.run(model.generated, f_dict), vocab, cfg.char_model)
-    print('\nTrue output')
+    print('\nTrue sentences from data')
     utils.display_sentences(true_output[:, 1:], vocab, cfg.char_model)
-    print('Sentences sampled from true encodings')
+    print('Sampled sentences from true encodings')
     f_dict = {model.latent: latent,
               model.data_dropped: np.zeros([cfg.batch_size, cfg.max_sent_length]),
               model.lengths: np.ones([cfg.batch_size], dtype=np.int)*cfg.max_sent_length}
     output = session.run(model.generated, f_dict)
     utils.display_sentences(output, vocab, cfg.char_model)
-    print('Sentences generated from true encodings')
+    print('MAP sentences from true encodings')
     output = session.run(decode_op, {model.latent: latent})
     utils.display_sentences(output, vocab, cfg.char_model, right_aligned=True)
 
