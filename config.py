@@ -33,15 +33,15 @@ flags.DEFINE_bool   ("variational",       True,    "Variational encoder-decoder"
 flags.DEFINE_bool   ("generate_argmax",   False,   "Use argmax instead of sampling during "
                                                    "generation")
 flags.DEFINE_bool   ("encoder_after_gan", True,    "Update the encoder after GAN generator update")
-flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
+flags.DEFINE_float  ("min_d_acc",         0.70,    "Update generator if descriminator is better "
                                                    "than this")
-flags.DEFINE_float  ("max_d_acc",         0.95,    "Update descriminator if accuracy less than "
+flags.DEFINE_float  ("max_d_acc",         0.90,    "Update descriminator if accuracy less than "
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
 flags.DEFINE_bool   ("sc_use_kld_weight", False,   "Scheduler waits for KL divergence weight to "
                                                    "reach its max")
-flags.DEFINE_integer("sc_list_size",      3,       "Number of previous prints to look at in "
+flags.DEFINE_integer("sc_list_size",      4,       "Number of previous prints to look at in "
                                                    "scheduler")
 flags.DEFINE_float  ("sc_decay",          0.1,     "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
