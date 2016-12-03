@@ -152,7 +152,7 @@ class EncoderDecoderModel(object):
             states = utils.highway(states, f=tf.nn.elu)
             states = utils.linear(states, cfg.latent_size, True, 0.0, scope='states_transform2')
             states = tf.reshape(states, [cfg.batch_size, -1, cfg.latent_size])
-            latent = tf.nn.tanh(tf.reduce_sum(states, [1]))
+            latent = tf.nn.elu(tf.reduce_sum(states, [1])) * 1e-1
             z_mean = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_mean')
             z_logvar = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_logvar')
         return z_mean, z_logvar
@@ -274,7 +274,7 @@ class EncoderDecoderModel(object):
             conv_out = tf.reshape(conv, [2 * cfg.batch_size, -1,
                                          cfg.hidden_size // cfg.d_conv_window])
             conv_out = tf.nn.bias_add(conv_out, b_conv)
-            reduced = tf.nn.tanh(tf.reduce_sum(conv_out, [1]))
+            reduced = tf.nn.elu(tf.reduce_sum(conv_out, [1])) * 1e-1
             output = utils.linear(reduced, 1, True, 0.0, scope='discriminator_output')
         return output
 
