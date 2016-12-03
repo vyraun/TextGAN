@@ -235,32 +235,18 @@ class EncoderDecoderModel(object):
     def discriminator_rnn(self, states):
         '''Recurrent discriminator that operates on the sequence of states of the sentences.'''
         with tf.variable_scope("Discriminator"):
-            latent = utils.highway(self.latent, layer_size=2)
-            latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
             if cfg.d_rnn_bidirect:
                 hidden_size = cfg.hidden_size
                 fcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
                 bcell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
-                initial = []
-                for i in range(cfg.d_num_layers * 2):
-                    initial.append(tf.nn.tanh(utils.linear(latent, hidden_size, True, 0.0,
-                                                           scope='Latent_initial%d' % i)))
-                initialf = fcell.initial_state(initial[:cfg.d_num_layers])
-                initialb = bcell.initial_state(initial[cfg.d_num_layers:])
+                seq_lengths = tf.pack([tf.shape(states)[1]] * (2 * cfg.batch_size))
                 outputs, _ = tf.nn.bidirectional_dynamic_rnn(fcell, bcell, states,
-                                                             initial_state_fw=initialf,
-                                                             initial_state_bw=initialb,
+                                                             sequence_length=seq_lengths,
                                                              swap_memory=True, dtype=tf.float32)
             else:
                 hidden_size = cfg.hidden_size * 2
                 cell = self.rnn_cell(cfg.d_num_layers, hidden_size, return_states=True)
-                initial = []
-                for i in range(cfg.d_num_layers):
-                    initial.append(tf.nn.tanh(utils.linear(latent, hidden_size, True, 0.0,
-                                                           scope='Latent_initial%d' % i)))
-                outputs, _ = tf.nn.dynamic_rnn(cell, states,
-                                               initial_state=cell.initial_state(initial),
-                                               swap_memory=True, dtype=tf.float32)
+                outputs, _ = tf.nn.dynamic_rnn(cell, states, swap_memory=True, dtype=tf.float32)
                 outputs = (outputs,)  # to match bidirectional RNN's output format
             d_states = []
             for out in outputs:
@@ -283,10 +269,7 @@ class EncoderDecoderModel(object):
             conv_out = tf.reshape(conv, [2 * cfg.batch_size, -1,
                                          cfg.hidden_size // cfg.d_conv_window])
             conv_out = tf.nn.elu(tf.nn.bias_add(conv_out, b_conv))
-            reduced = tf.reduce_mean(conv_out, [1])
-            lin_latent = tf.nn.elu(utils.linear(self.latent, cfg.hidden_size // cfg.d_conv_window,
-                                                True, 0.0, scope='lin_latent'))
-            reduced = tf.concat(1, [lin_latent, reduced])
+            reduced = tf.reduce_sum(conv_out, [1])
             output = utils.linear(reduced, 1, True, 0.0, scope='discriminator_output')
         return output
 
@@ -307,7 +290,6 @@ class EncoderDecoderModel(object):
     def discriminator_energy(self, states):  # FIXME
         '''An energy-based discriminator that tries to reconstruct the input states.'''
         with tf.variable_scope("Discriminator"):
-            # TODO initial state
             _, state = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size), states,
                                          swap_memory=True, dtype=tf.float32,
                                          scope='discriminator_encoder')
