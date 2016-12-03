@@ -38,7 +38,7 @@ flags.DEFINE_float  ("max_d_acc",         0.96,    "Update descriminator if accu
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
-flags.DEFINE_bool   ("sc_use_kld_weight", True,    "Scheduler waits for KL divergence weight to "
+flags.DEFINE_bool   ("sc_use_kld_weight", False,   "Scheduler waits for KL divergence weight to "
                                                    "reach its max")
 flags.DEFINE_integer("sc_list_size",      3,       "Number of previous prints to look at in "
                                                    "scheduler")
