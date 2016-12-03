@@ -192,6 +192,10 @@ class EncoderDecoderModel(object):
                 if cfg.concat_inputs:
                     embeddings = outputs[:, :, cfg.hidden_size+1:cfg.hidden_size+1+cfg.emb_size]
                     embeddings = tf.concat(1, [inputs[:, :1, :], embeddings[:, :-1, :]])
+                    embeddings = tf.concat(2, [embeddings, tf.tile(tf.expand_dims(latent, 1),
+                                                                   tf.pack([1,
+                                                                            tf.shape(embeddings)[1],
+                                                                            1]))])
                     skip += cfg.emb_size
             states = outputs[:, :, cfg.hidden_size+skip:]
             if cfg.concat_inputs:
