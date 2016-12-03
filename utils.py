@@ -94,7 +94,7 @@ def fix_word(word):
     return word
 
 
-def display_sentences(output, vocab, char_model):
+def display_sentences(output, vocab, char_model, right_aligned=False):
     '''Display sentences from indices.'''
     if char_model:
         space = ''
@@ -102,8 +102,15 @@ def display_sentences(output, vocab, char_model):
         space = ' '
     for i, sent in enumerate(output):
         print('Sentence %d:' % i, end=' ')
+        started = not right_aligned
         for word in sent:
-            print(vocab.vocab[word], end=space)
+            if not word or word == vocab.eos_index:
+                if started:
+                    break
+            else:
+                if not started:
+                    started = True
+                print(vocab.vocab[word], end=space)
         print()
     print()
 

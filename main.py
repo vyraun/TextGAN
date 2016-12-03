@@ -4,9 +4,11 @@ import time
 import numpy as np
 import tensorflow as tf
 
+from beamsearch import BeamDecoder
 from config import cfg
 from encdec import EncoderDecoderModel
 from reader import Reader, Vocab
+import rnncell
 import utils
 
 
@@ -28,24 +30,47 @@ def call_session(session, model, batch, train_d=False, train_g=False, get_latent
     return session.run(ops, f_dict)[:-len(train_ops)]
 
 
-def generate_sentences(session, model, vocab, random_dims=None, mle_generator=False,
-                       true_output=None):
-    '''Generate sentences using the generator, either novel or from known encodings (mle_generator).
-    '''
+def beam_decode_op(model, vocab, beam_size):
+    cell = rnncell.SoftmaxWrapper(model.decode_cell, model.softmax_w, model.softmax_b,
+                                  output_slice=cfg.hidden_size)
+    initial_state = model.decode_initial
+    initial_input = tf.nn.embedding_lookup(model.embedding, tf.constant(vocab.sos_index,
+                                                                        tf.int32,
+                                                                        [cfg.batch_size]))
+    batch_concat = model.latent_transformed
+    beam_decoder = BeamDecoder(len(vocab.vocab), batch_concat, beam_size=beam_size,
+                               stop_token=vocab.eos_index, max_len=cfg.max_sent_length)
+
+    _, final_state = tf.nn.seq2seq.rnn_decoder(
+                         [beam_decoder.wrap_input(initial_input)] +
+                         [None] * (cfg.max_sent_length - 1),
+                         beam_decoder.wrap_state(initial_state),
+                         beam_decoder.wrap_cell(cell),
+                         loop_function=lambda prev_symbol, i: tf.nn.embedding_lookup(
+                             model.embedding,
+                             prev_symbol),
+                         scope='Decoder/RNN'
+                     )
+    return beam_decoder.unwrap_output_dense(final_state)
+
+
+def generate_sentences(session, model, decode_op, vocab, latent, true_output):
+    '''Generate sentences using the generator.'''
     # TODO for MAP inference, use beam search
     # XXX uncond:
     #f_dict = {model.data: np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)}
     #utils.display_sentences(session.run(model.generated, f_dict), vocab, cfg.char_model)
-    if mle_generator:
-        print('\nTrue output')
-        utils.display_sentences(true_output[:, 1:], vocab, cfg.char_model)
-        print('Sentences generated from true encodings')
-        f_dict = {model.latent: random_dims}
-    else:
-        print('\nNovel sentences: new batch')
-        f_dict = {}
+    print('\nTrue output')
+    utils.display_sentences(true_output[:, 1:], vocab, cfg.char_model)
+    print('Sentences sampled from true encodings')
+    f_dict = {model.latent: latent,
+              model.data_dropped: np.zeros([cfg.batch_size, cfg.max_sent_length]),
+              model.lengths: np.ones([cfg.batch_size], dtype=np.int)*cfg.max_sent_length}
     output = session.run(model.generated, f_dict)
     utils.display_sentences(output, vocab, cfg.char_model)
+    print('Sentences generated from true encodings')
+    output = session.run(decode_op, {model.latent: latent})
+    utils.display_sentences(output, vocab, cfg.char_model, right_aligned=True)
 
 
 def save_model(session, saver, perp, cur_iters):
@@ -58,8 +83,8 @@ def save_model(session, saver, perp, cur_iters):
     print("Saved to", save_file)
 
 
-def run_epoch(epoch, session, model, generator, batch_loader, vocab,
-              saver, steps, max_steps, scheduler, use_gan, gen_every):
+def run_epoch(epoch, session, model, generator, batch_loader, vocab, saver, steps, max_steps,
+              scheduler, use_gan, gen_every, decode_op):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
@@ -171,9 +196,7 @@ def run_epoch(epoch, session, model, generator, batch_loader, vocab,
 
         if gen_every > 0 and (step + 1) % gen_every == 0:
             if latest_latent is not None:
-                generate_sentences(session, generator, vocab, latest_latent, True, batch[0])
-            for _ in range(cfg.gen_samples):
-                generate_sentences(session, model, vocab)
+                generate_sentences(session, generator, decode_op, vocab, latest_latent, batch[0])
 
         cur_iters = steps + step
         if saver is not None and cur_iters and cfg.save_every > 0 and \
@@ -182,10 +205,6 @@ def run_epoch(epoch, session, model, generator, batch_loader, vocab,
 
         if max_steps > 0 and cur_iters >= max_steps:
             break
-
-    if gen_every < 0:
-        for _ in range(cfg.gen_samples):
-            generate_sentences(session, model, vocab)
 
     perp = np.exp(nlls / iters)
     cur_iters = steps + step
@@ -219,6 +238,7 @@ def main(_):
                 test_model = EncoderDecoderModel(vocab, False, use_gan=cfg.use_gan)
                 scope.reuse_variables()
             generator = EncoderDecoderModel(vocab, False, use_gan=cfg.use_gan, generator=True)
+            decode_op = beam_decode_op(generator, vocab, cfg.beam_size)
         saver = tf.train.Saver()
         try:
             # try to restore a saved model file
@@ -248,13 +268,14 @@ def main(_):
                 print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, model, generator,
                                               reader.training(), vocab, saver, steps,
-                                              cfg.max_steps, scheduler, cfg.use_gan, cfg.gen_every)
+                                              cfg.max_steps, scheduler, cfg.use_gan, cfg.gen_every,
+                                              decode_op)
                 print("Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity))
                 train_perps.append(perplexity)
                 if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_model, generator,
                                               reader.validation(), vocab,
-                                              None, 0, -1, None, cfg.use_gan, -1)
+                                              None, 0, -1, None, cfg.use_gan, -1, decode_op)
                     print("Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity))
                     valid_perps.append(perplexity)
                 else:
@@ -267,7 +288,7 @@ def main(_):
             print('\nTesting')
             perplexity, _ = run_epoch(0, session, test_model, generator,
                                       reader.testing(), vocab, None, 0, cfg.max_steps, None,
-                                      cfg.use_gan, -1)
+                                      cfg.use_gan, -1, decode_op)
             print("Test Perplexity: %.3f" % perplexity)
 
 

@@ -181,3 +181,35 @@ class MultiRNNCell(tf.nn.rnn_cell.RNNCell):
             return tf.concat(1, output + ret_states), tuple(new_states)
         else:
             return cur_inp, tuple(new_states)
+
+
+class SoftmaxWrapper(tf.nn.rnn_cell.RNNCell):
+
+    """Operator adding a softmax projection to the given cell."""
+
+    def __init__(self, cell, softmax_w, softmax_b, output_slice=None):
+        """Create a cell with output projection."""
+        self.cell = cell
+        self.softmax_w = softmax_w
+        self.softmax_b = softmax_b
+        self.output_slice = output_slice
+
+    @property
+    def state_size(self):
+        return self.cell.state_size
+
+    @property
+    def output_size(self):
+        return self.softmax_b.get_shape()[0]
+
+    def __call__(self, inputs, state, scope=None):
+        """Run the cell and output projection on inputs, starting from state."""
+        output, res_state = self.cell(inputs, state)
+        if self.output_slice is not None:
+            output = output[:, :self.output_slice]
+        # Default scope: "SoftmaxWrapper"
+        with tf.variable_scope(scope or type(self).__name__):
+            projected = tf.nn.bias_add(tf.matmul(output, tf.transpose(self.softmax_w),
+                                                 name='softmax_transform'),
+                                       self.softmax_b)
+        return projected, res_state

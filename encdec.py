@@ -162,6 +162,7 @@ class EncoderDecoderModel(object):
         with tf.variable_scope("Decoder", reuse=reuse):
             latent = utils.highway(self.latent, layer_size=2, f=tf.nn.elu)
             latent = utils.linear(latent, cfg.latent_size, True, 0.0, scope='Latent_transform')
+            self.latent_transformed = latent
             initial = []
             for i in range(cfg.num_layers):
                 preact = utils.linear(latent, cfg.hidden_size, True, 0.0,
@@ -173,11 +174,15 @@ class EncoderDecoderModel(object):
                                                        tf.pack([1, tf.shape(inputs)[1], 1]))])
                 cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, return_states=True,
                                      pretanh=True)
+                self.decode_cell = cell
             else:
                 cell = self.rnn_cell(cfg.num_layers, cfg.hidden_size, latent, self.embedding,
                                      self.softmax_w, self.softmax_b, return_states=True,
                                      pretanh=True, get_embeddings=cfg.concat_inputs)
-            outputs, _ = tf.nn.dynamic_rnn(cell, inputs, initial_state=cell.initial_state(initial),
+            initial_state = cell.initial_state(initial)
+            if mle_mode:
+                self.decode_initial = initial_state
+            outputs, _ = tf.nn.dynamic_rnn(cell, inputs, initial_state=initial_state,
                                            swap_memory=True, dtype=tf.float32)
             output = outputs[:, :, :cfg.hidden_size]
             if mle_mode:
