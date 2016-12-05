@@ -1,3 +1,5 @@
+import multiprocessing
+from multiprocessing import Pool
 from pathlib import Path
 import random
 import re
@@ -10,7 +12,7 @@ input_dir = 'gutenberg'  # raw text dir
 data_coverage = 0.97  # decide vocab based on how much of the data should be covered
 
 MIN_LEN = 4
-MAX_LEN = 49  # 12 for data_short
+MAX_LEN = 75
 
 val_split = 0.0004  # gutenberg is huge
 test_split = 0.0006
@@ -72,25 +74,33 @@ def summarize(output, vocab):
     return train_N, val_N, test_N
 
 
+def process_file(fname):
+    print(fname)
+    output = []
+    vocab = nltk.FreqDist()
+    with fname.open('r', encoding='latin-1') as f:
+        paragraph = []
+        for l in f:
+            line = l.strip()
+            if not line:
+                process(output, vocab, paragraph)
+                paragraph = []
+            else:
+                paragraph.append(line)
+        process(output, vocab, paragraph)
+    return output, vocab
+
+
 if __name__ == '__main__':
     output = []
     vocab = nltk.FreqDist()
     print('Reading...')
     fnames = sorted(Path(input_dir).glob('*.txt'))
-    for i, fname in enumerate(fnames):
-        print('(%d/%d) %s' % (i, len(fnames), fname))
-        with fname.open('r', encoding='latin-1') as f:
-            paragraph = []
-            for l in f:
-                line = l.strip()
-                if not line:
-                    process(output, vocab, paragraph)
-                    paragraph = []
-                else:
-                    paragraph.append(line)
-            process(output, vocab, paragraph)
-        if (i + 1) % 50 == 0:
-            summarize(output, vocab)
+    p = Pool(int(.5 + (.9 * multiprocessing.cpu_count())))
+    outs = p.map(process_file, fnames)
+    for o, v in outs:
+        output.extend(o)
+        vocab.update(v)
 
     train_N, val_N, test_N = summarize(output, vocab)
     top_words = vocab.most_common()
