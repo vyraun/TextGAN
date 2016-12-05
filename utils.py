@@ -86,12 +86,17 @@ def display_sentences(output, vocab, char_model):
     '''Display sentences from indices.'''
     if char_model:
         space = ''
+        nospace = ' '
     else:
         space = ' '
+        nospace = ''
     for i, sent in enumerate(output):
         print('Sentence %d:' % i, end=' ')
         for word in sent:
-            print(vocab.vocab[word], end=space)
+            if word == vocab.sos_index:
+                print(nospace + '. ', end='')
+            else:
+                print(vocab.vocab[word], end=space)
         print()
     print()
 

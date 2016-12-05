@@ -238,8 +238,6 @@ class RNNLMModel(object):
 
     def _train(self, cost, scope, optimizer, global_step=None):
         '''Generic training helper'''
-        # TODO compute gradients more precisely with different costs and take one optimizer step
-        #      after one global clip
         tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
         grads = tf.gradients(cost, tvars)
         if cfg.max_grad_norm > 0:
