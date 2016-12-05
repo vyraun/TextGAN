@@ -9,7 +9,7 @@ import nltk
 
 input_dir = 'gutenberg'  # raw text dir
 
-data_coverage = 0.97  # decide vocab based on how much of the data should be covered
+data_coverage = 0.975  # decide vocab based on how much of the data should be covered
 
 MIN_LEN = 4
 MAX_LEN = 75
@@ -55,6 +55,9 @@ def create_file(fname, lines, vocab):
                 else:
                     words.append('<unk>')
             print(' '.join(words), file=f)
+    with open('full' + fname, 'w') as f:
+        for line in lines:
+            print(' '.join(line), file=f)
 
 
 def summarize(output, vocab):
