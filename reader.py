@@ -38,14 +38,11 @@ class Vocab(object):
 
     def load_from_pickle(self, verbose=True):
         '''Read the vocab from a pickled file'''
-        if cfg.char_model:
-            pkfile = cfg.char_vocab_file
-        else:
-            pkfile = cfg.word_vocab_file
+        pkfile = cfg.vocab_file
         try:
             if verbose:
                 print('Loading vocabulary from pickle...')
-            with open(pkfile, 'rb') as f:
+            with pkfile.open('rb') as f:
                 self.vocab, self.vocab_lookup = pickle.load(f)
             if verbose:
                 print('Vocabulary loaded, size:', len(self.vocab))
@@ -53,7 +50,7 @@ class Vocab(object):
             if verbose:
                 print('Error loading from pickle, attempting parsing.')
             self.load_by_parsing(save=True, verbose=verbose)
-            with open(pkfile, 'wb') as f:
+            with pkfile.open('wb') as f:
                 pickle.dump([self.vocab, self.vocab_lookup], f, -1)
                 if verbose:
                     print('Saved pickle file.')

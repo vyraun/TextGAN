@@ -1,3 +1,4 @@
+from pathlib import Path
 import tensorflow as tf
 
 flags = tf.flags
@@ -5,11 +6,12 @@ cfg = flags.FLAGS
 
 
 # command-line config
-flags.DEFINE_string ("data_path",       "data_short",           "Data path")
-flags.DEFINE_string ("save_file",       "models/recent.dat",    "Save file")
-flags.DEFINE_string ("load_file",       "",                     "File to load model from")
-flags.DEFINE_string ("word_vocab_file", "data_short/wvocab.pk", "Word vocab pickle file")
-flags.DEFINE_string ("char_vocab_file", "data_short/cvocab.pk", "Character vocab pickle file")
+flags.DEFINE_string ("data_path",       "data_short",        "Data path")
+flags.DEFINE_string ("save_file",       "models/recent.dat", "Save file")
+flags.DEFINE_string ("load_file",       "",                  "File to load model from")
+flags.DEFINE_string ("word_vocab_file", "wvocab.pk",         "Word vocab pickle file in data path")
+flags.DEFINE_string ("char_vocab_file", "cvocab.pk",         "Character vocab pickle file in data "
+                                                             "path")
 
 flags.DEFINE_bool   ("char_model",        False,   "Character-level model")
 flags.DEFINE_bool   ("use_gan",           True,    "Use adversatial objectives")
@@ -72,8 +74,10 @@ if cfg.char_model:
     cfg.hidden_size = cfg.char_hidden_size
     cfg.max_sent_length = cfg.char_sent_length
     cfg.d_eb_margin = cfg.d_char_eb_margin
+    cfg.vocab_file = Path(cfg.data_path) / cfg.char_vocab_file
 else:
     cfg.emb_size = cfg.word_emb_size
     cfg.hidden_size = cfg.word_hidden_size
     cfg.max_sent_length = cfg.word_sent_length
     cfg.d_eb_margin = cfg.d_word_eb_margin
+    cfg.vocab_file = Path(cfg.data_path) / cfg.word_vocab_file
