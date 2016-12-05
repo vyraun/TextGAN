@@ -152,15 +152,15 @@ def main(_):
         n_words = np.sum(batch != 0)
         w += n_words
         c += len(batch)
-        for line in batch:
-            print(line)
-            for e in line:
-                if cfg.char_model:
-                    print(vocab.vocab[e], end='')
-                else:
-                    print(vocab.vocab[e], end=' ')
-            print()
-            print()
+        #for line in batch:
+        #    print(line)
+        #    for e in line:
+        #        if cfg.char_model:
+        #            print(vocab.vocab[e], end='')
+        #        else:
+        #            print(vocab.vocab[e], end=' ')
+        #    print()
+        #    print()
     print('Total lines:', c)
     print('Total words:', w)
 

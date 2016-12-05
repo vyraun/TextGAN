@@ -1,6 +1,5 @@
 # Project-specific stuff
-data
-data_short
+data_*/
 models
 gutenberg
 
