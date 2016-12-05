@@ -108,21 +108,19 @@ class RNNLMModel(object):
                                      self.softmax_w, self.softmax_b, return_states=True,
                                      pretanh=True, get_embeddings=cfg.concat_inputs)
             outputs, _ = tf.nn.dynamic_rnn(cell, inputs, swap_memory=True, dtype=tf.float32)
-            output = tf.slice(outputs, [0, 0, 0], [-1, -1, cfg.hidden_size])
+            output = outputs[:, :, :cfg.hidden_size]
             if mle_mode:
                 generated = None
                 skip = 0
             else:
-                generated = tf.squeeze(tf.cast(tf.slice(outputs, [0, 0, cfg.hidden_size],
-                                                        [-1, -1, 1]),
+                generated = tf.squeeze(tf.cast(outputs[:, :, cfg.hidden_size:cfg.hidden_size+1],
                                                tf.int32), [-1])
                 skip = 1
                 if cfg.concat_inputs:
-                    embeddings = tf.slice(outputs, [0, 0, cfg.hidden_size + 1],
-                                          [-1, -1, cfg.emb_size])
+                    embeddings = outputs[:, :, cfg.hidden_size+1:cfg.hidden_size+1+cfg.emb_size]
                     embeddings = tf.concat(1, [inputs[:, :1, :], embeddings[:, :-1, :]])
                     skip += cfg.emb_size
-            states = tf.slice(outputs, [0, 0, cfg.hidden_size + skip], [-1, -1, -1])
+            states = outputs[:, :, cfg.hidden_size+skip:]
             if cfg.concat_inputs:
                 if mle_mode:
                     states = tf.concat(2, [states, inputs])
@@ -167,8 +165,8 @@ class RNNLMModel(object):
                 outputs = (outputs,)  # to match bidirectional RNN's output format
             d_states = []
             for out in outputs:
-                output = tf.slice(out, [0, 0, 0], [-1, -1, hidden_size])
-                dir_states = tf.slice(out, [0, 0, hidden_size], [-1, -1, -1])
+                output = out[:, :, :hidden_size]
+                dir_states = out[:, :, hidden_size:]
                 # for GRU, we skipped the last layer states because they're the outputs
                 d_states.append(tf.concat(2, [dir_states, output]))
         return self._discriminator_conv(tf.concat(2, d_states))
