@@ -30,7 +30,7 @@ flags.DEFINE_float  ("max_d_acc",         0.97,    "Update descriminator if accu
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
-flags.DEFINE_integer("sc_list_size",      10,      "Number of previous prints to look at in "
+flags.DEFINE_integer("sc_list_size",      8,       "Number of previous prints to look at in "
                                                    "scheduler")
 flags.DEFINE_float  ("sc_decay",          0.33,    "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")

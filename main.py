@@ -55,36 +55,27 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
     shortterm_steps = 0
     g_steps = 0
     d_steps = 0
-    gan_steps = 0
     update_d = False
     update_g = False
-    update_gan = False
 
     for step, batch in enumerate(batch_loader):
         cur_iters = steps + step
         if scheduler is not None:
             update_d = use_gan and scheduler.update_d()
             update_g = use_gan and scheduler.update_g()
-            update_gan = update_d or update_g
         if update_d:
             d_steps += 1
         if update_g:
             g_steps += 1
-        if update_gan:
-            gan_steps += 1
 
         nll, mle_cost, d_cost, g_cost = call_session(session, model, batch, train_d=update_d,
                                                      train_g=update_g)
-        if not update_gan:
-            d_cost = 0.0
-            g_cost = 0.0
-        else:
-            if scheduler is not None:
-                if cfg.d_energy_based:
-                    d_acc = -1.0
-                else:
-                    d_acc = np.exp(-d_cost)
-                scheduler.add_d_acc(d_acc)
+        if scheduler is not None:
+            if cfg.d_energy_based:
+                d_acc = -1.0
+            else:
+                d_acc = np.exp(-d_cost)
+            scheduler.add_d_acc(d_acc)
 
         if cfg.char_model:
             n_words = (np.sum(batch == vocab.vocab_lookup[' ']) // cfg.batch_size) + 1
@@ -106,15 +97,11 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
         if step % cfg.print_every == 0:
             avg_nll = shortterm_nlls / shortterm_iters
             avg_mle_cost = shortterm_mle_costs / shortterm_steps
-            if gan_steps:
-                avg_d_cost = shortterm_d_costs / gan_steps
-                if cfg.d_energy_based:
-                    d_acc = -1.0
-                else:
-                    d_acc = np.exp(-avg_d_cost)
-            else:
-                avg_d_cost = -1.0
+            avg_d_cost = shortterm_d_costs / shortterm_steps
+            if cfg.d_energy_based:
                 d_acc = -1.0
+            else:
+                d_acc = np.exp(-avg_d_cost)
             if g_steps:
                 avg_g_cost = shortterm_g_costs / g_steps
             else:
@@ -132,7 +119,6 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
             shortterm_steps = 0
             g_steps = 0
             d_steps = 0
-            gan_steps = 0
             start_time = time.time()
 
         if gen_every > 0 and (step + 1) % gen_every == 0:

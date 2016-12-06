@@ -10,6 +10,7 @@ class Scheduler(object):
     '''Scheduler for GANs'''
 
     def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay):
+        assert min_d_acc < max_d_acc
         self.min_d_acc = min_d_acc
         self.max_d_acc = max_d_acc
         self.max_perp = max_perp
@@ -20,6 +21,8 @@ class Scheduler(object):
         for _ in range(list_size - 1):
             coeffs.append(coeffs[-1] * decay)
         self.coeffs = np.array(coeffs) / sum(coeffs)
+        # TODO make configurable
+        self.d_coeffs = np.array([0.998 ** i for i in range(list_size)])
 
     def add_d_acc(self, d_acc):
         '''Observe new descriminator accuracy.'''
@@ -41,34 +44,30 @@ class Scheduler(object):
             coeffs /= np.sum(coeffs)
         return np.sum(np.array(self.perps) * coeffs)
 
-    def _best_d_acc(self):
-        return np.max(self.d_accs)
-
     def _current_d_acc(self):
-        '''Smooth approximation of current descriminator accuracy.'''
-        coeffs = self.coeffs.copy(order='K')
-        if len(self.d_accs) < self.list_size:
-            coeffs = coeffs[:len(self.d_accs)]
-            coeffs /= np.sum(coeffs)
-        return np.sum(np.array(self.d_accs) * coeffs)
+        '''Overestimate the current discriminator accuracy to avoid a powerful discriminator.'''
+        if not self.d_accs:
+            return 0.5
+        else:
+            return np.max(self.d_accs * self.d_coeffs[:len(self.d_accs)])
 
     def update_d(self):
         '''Whether or not to update the descriminator.'''
-        if len(self.perps) < self.list_size or \
-           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
-            return False
-        if len(self.d_accs) == 0 or self._best_d_acc() < self.max_d_acc:
+#        if len(self.perps) < self.list_size or \
+#           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
+#            return False
+        if self._current_d_acc() < self.max_d_acc:
             return True
         else:
             return False
 
     def update_g(self):
         '''Whether or not to update the generator.'''
-        if len(self.perps) < self.list_size or \
-           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
-            return False
-        d_acc = self._current_d_acc()
-        if len(self.d_accs) > 0 and (d_acc < 0.0 or d_acc > self.min_d_acc):
+#        if len(self.perps) < self.list_size or \
+#           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
+#            return False
+#        if len(self.d_accs) > 0 and (d_acc < 0.0 or d_acc > self.min_d_acc):
+        if self._current_d_acc() > self.min_d_acc:
             return True
         else:
             return False
