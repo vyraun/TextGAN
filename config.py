@@ -6,7 +6,7 @@ cfg = flags.FLAGS
 
 
 # command-line config
-flags.DEFINE_string ("data_path",       "data_short",        "Data path")
+flags.DEFINE_string ("data_path",       "data_ptb",          "Data path")
 flags.DEFINE_string ("save_file",       "models/recent.dat", "Save file")
 flags.DEFINE_string ("load_file",       "",                  "File to load model from")
 flags.DEFINE_string ("word_vocab_file", "wvocab.pk",         "Word vocab pickle file in data path")
@@ -19,20 +19,20 @@ flags.DEFINE_integer("batch_size",        48,      "Batch size")
 flags.DEFINE_integer("word_emb_size",     224,     "Word embedding size")
 flags.DEFINE_integer("char_emb_size",     96,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
-flags.DEFINE_integer("word_hidden_size",  512,     "RNN hidden state size for word model")
-flags.DEFINE_integer("char_hidden_size",  768,     "RNN hidden state size for char model")
+flags.DEFINE_integer("word_hidden_size",  768,     "RNN hidden state size for word model")
+flags.DEFINE_integer("char_hidden_size",  800,     "RNN hidden state size for char model")
 flags.DEFINE_integer("softmax_samples",   1024,    "Number of classes to sample for softmax")
 flags.DEFINE_bool   ("concat_inputs",     True,    "Concatenate inputs to states before "
                                                    "discriminating")
-flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
+flags.DEFINE_float  ("min_d_acc",         0.72,    "Update generator if descriminator is better "
                                                    "than this")
-flags.DEFINE_float  ("max_d_acc",         0.99,    "Update descriminator if accuracy less than "
+flags.DEFINE_float  ("max_d_acc",         0.94,    "Update descriminator if accuracy less than "
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
-flags.DEFINE_integer("sc_list_size",      3,       "Number of previous prints to look at in "
+flags.DEFINE_integer("sc_list_size",      4,       "Number of previous prints to look at in "
                                                    "scheduler")
-flags.DEFINE_float  ("sc_decay",          0.2,     "Scheduler importance decay")
+flags.DEFINE_float  ("sc_decay",          0.17,    "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
 flags.DEFINE_bool   ("d_energy_based",    False,   "Energy-based discriminator")
 flags.DEFINE_float  ("d_word_eb_margin",  512.0,   "Margin for energy-based discriminator for word "
@@ -81,3 +81,12 @@ else:
     cfg.max_sent_length = cfg.word_sent_length
     cfg.d_eb_margin = cfg.d_word_eb_margin
     cfg.vocab_file = Path(cfg.data_path) / cfg.word_vocab_file
+
+
+print('Config:')
+cfg._parse_flags()
+cfg_dict = cfg.__dict__['__flags']
+maxlen = max(len(k) for k in cfg_dict)
+for k, v in sorted(cfg_dict.items(), key=lambda x: x[0]):
+    print(k.ljust(maxlen + 2), v)
+print()
