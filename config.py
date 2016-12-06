@@ -15,7 +15,7 @@ flags.DEFINE_string ("char_vocab_file", "cvocab.pk",         "Character vocab pi
 
 flags.DEFINE_bool   ("char_model",        False,   "Character-level model")
 flags.DEFINE_bool   ("use_gan",           True,    "Use adversatial objectives")
-flags.DEFINE_integer("batch_size",        48,      "Batch size")
+flags.DEFINE_integer("batch_size",        50,      "Batch size")
 flags.DEFINE_integer("word_emb_size",     224,     "Word embedding size")
 flags.DEFINE_integer("char_emb_size",     96,      "Character embedding size")
 flags.DEFINE_integer("num_layers",        1,       "Number of RNN layers")
@@ -24,15 +24,15 @@ flags.DEFINE_integer("char_hidden_size",  800,     "RNN hidden state size for ch
 flags.DEFINE_integer("softmax_samples",   1024,    "Number of classes to sample for softmax")
 flags.DEFINE_bool   ("concat_inputs",     True,    "Concatenate inputs to states before "
                                                    "discriminating")
-flags.DEFINE_float  ("min_d_acc",         0.72,    "Update generator if descriminator is better "
+flags.DEFINE_float  ("min_d_acc",         0.75,    "Update generator if descriminator is better "
                                                    "than this")
-flags.DEFINE_float  ("max_d_acc",         0.94,    "Update descriminator if accuracy less than "
+flags.DEFINE_float  ("max_d_acc",         0.97,    "Update descriminator if accuracy less than "
                                                    "this")
 flags.DEFINE_float  ("max_perplexity",    -1,      "Scheduler maintains perplexity to be under "
                                                    "this (-1 to disable)")
-flags.DEFINE_integer("sc_list_size",      4,       "Number of previous prints to look at in "
+flags.DEFINE_integer("sc_list_size",      10,      "Number of previous prints to look at in "
                                                    "scheduler")
-flags.DEFINE_float  ("sc_decay",          0.17,    "Scheduler importance decay")
+flags.DEFINE_float  ("sc_decay",          0.33,    "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
 flags.DEFINE_bool   ("d_energy_based",    False,   "Energy-based discriminator")
 flags.DEFINE_float  ("d_word_eb_margin",  512.0,   "Margin for energy-based discriminator for word "
@@ -44,8 +44,8 @@ flags.DEFINE_integer("d_num_layers",      1,       "Number of RNN layers for dis
 flags.DEFINE_bool   ("d_rnn_bidirect",    True,    "Recurrent discriminator is bidirectional")
 flags.DEFINE_integer("d_conv_window",     5,       "Convolution window for convolution on "
                                                    "discriminative RNN's states")
-flags.DEFINE_integer("word_sent_length",  192,     "Maximum length of a sentence for word model")
-flags.DEFINE_integer("char_sent_length",  480,     "Maximum length of a sentence for char model")
+flags.DEFINE_integer("word_sent_length",  256,     "Maximum length of a sentence for word model")
+flags.DEFINE_integer("char_sent_length",  512,     "Maximum length of a sentence for char model")
 flags.DEFINE_float  ("max_grad_norm",     5.0,     "Gradient clipping")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")
 flags.DEFINE_string ("d_optimizer",       "adam",  "Discriminator optimizer to use (sgd, adam, "

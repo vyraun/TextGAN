@@ -41,6 +41,9 @@ class Scheduler(object):
             coeffs /= np.sum(coeffs)
         return np.sum(np.array(self.perps) * coeffs)
 
+    def _best_d_acc(self):
+        return np.max(self.d_accs)
+
     def _current_d_acc(self):
         '''Smooth approximation of current descriminator accuracy.'''
         coeffs = self.coeffs.copy(order='K')
@@ -54,7 +57,7 @@ class Scheduler(object):
         if len(self.perps) < self.list_size or \
            (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
             return False
-        if len(self.d_accs) == 0 or self._current_d_acc() < self.max_d_acc:
+        if len(self.d_accs) == 0 or self._best_d_acc() < self.max_d_acc:
             return True
         else:
             return False
