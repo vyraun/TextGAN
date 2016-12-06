@@ -61,6 +61,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
     update_gan = False
 
     for step, batch in enumerate(batch_loader):
+        cur_iters = steps + step
         if scheduler is not None:
             update_d = use_gan and scheduler.update_d()
             update_g = use_gan and scheduler.update_g()
@@ -118,9 +119,9 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
                 avg_g_cost = shortterm_g_costs / g_steps
             else:
                 avg_g_cost = -1.0
-            print("%d: %d  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  d_cost: %.4f  "
+            print("%d: %d (%d)  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  d_cost: %.4f  "
                   "g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  D:%d G:%d" % (epoch + 1, step,
-                  np.exp(avg_nll), avg_nll, avg_mle_cost, avg_d_cost, avg_g_cost, d_acc,
+                  cur_iters, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_d_cost, avg_g_cost, d_acc,
                   shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
 
             shortterm_nlls = 0.0
@@ -138,7 +139,6 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
             for _ in range(cfg.gen_samples):
                 generate_sentences(session, model, vocab)
 
-        cur_iters = steps + step
         if saver is not None and cur_iters and cfg.save_every > 0 and \
                 cur_iters % cfg.save_every == 0:
             save_model(session, saver, np.exp(nlls / iters), cur_iters)
@@ -181,10 +181,12 @@ def main(_):
             else:
                 test_model = RNNLMModel(vocab, False, cfg.use_gan)
         saver = tf.train.Saver()
+        steps = 0
         try:
             # try to restore a saved model file
             saver.restore(session, cfg.load_file)
             print("Model restored from", cfg.load_file)
+            steps = session.run(model.global_step)
         except ValueError:
             if cfg.training:
                 tf.initialize_all_variables().run()
@@ -194,7 +196,6 @@ def main(_):
                 sys.exit(1)
 
         if cfg.training:
-            steps = 0
             train_perps = []
             valid_perps = []
             session.run(tf.assign(g_lr, cfg.g_learning_rate))
