@@ -167,7 +167,7 @@ def main(_):
                 eval_model = RNNLMModel(vocab, False, cfg.use_gan)
             else:
                 test_model = RNNLMModel(vocab, False, cfg.use_gan)
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(max_to_keep=None)
         steps = 0
         try:
             # try to restore a saved model file
