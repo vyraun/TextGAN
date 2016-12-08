@@ -29,7 +29,7 @@ class Vocab(object):
                 print(fname)
             with fname.open('r') as f:
                 for line in f:
-                    for word in utils.read_words(line, chars=cfg.char_model):
+                    for word in utils.read_words(line, chars=False):
                         if word not in self.vocab_lookup:
                             self.vocab_lookup[word] = len(self.vocab)
                             self.vocab.append(word)
@@ -38,7 +38,7 @@ class Vocab(object):
 
     def load_from_pickle(self, verbose=True):
         '''Read the vocab from a pickled file'''
-        pkfile = cfg.vocab_file
+        pkfile = Path(cfg.data_path) / cfg.vocab_file
         try:
             if verbose:
                 print('Loading vocabulary from pickle...')
@@ -69,8 +69,7 @@ class Reader(object):
         for fname in fnames:
             with fname.open('r') as f:
                 for line in f:
-                    yield self.vocab.lookup([w for w in utils.read_words(line,
-                                                                         chars=cfg.char_model)])
+                    yield self.vocab.lookup([w for w in utils.read_words(line, chars=False)])
 
     def _prepare(self, lines):
         '''Prepare non-overlapping data'''
@@ -155,10 +154,7 @@ def main(_):
         #for line in batch:
         #    print(line)
         #    for e in line:
-        #        if cfg.char_model:
-        #            print(vocab.vocab[e], end='')
-        #        else:
-        #            print(vocab.vocab[e], end=' ')
+        #        print(vocab.vocab[e], end=' ')
         #    print()
         #    print()
     print('Total lines:', c)
