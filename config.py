@@ -13,6 +13,7 @@ flags.DEFINE_string ("word_vocab_file", "wvocab.pk",         "Word vocab pickle 
 flags.DEFINE_string ("char_vocab_file", "cvocab.pk",         "Character vocab pickle file in data "
                                                              "path")
 
+flags.DEFINE_bool   ("preallocate_gpu",   True,    "Preallocate all of the GPU memory")
 flags.DEFINE_bool   ("char_model",        False,   "Character-level model")
 flags.DEFINE_bool   ("use_gan",           True,    "Use adversatial objectives")
 flags.DEFINE_integer("batch_size",        50,      "Batch size")
