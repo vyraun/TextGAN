@@ -11,6 +11,7 @@ flags.DEFINE_string ("load_file",  "",                  "File to load model from
 flags.DEFINE_string ("vocab_file", "wvocab.pk",         "Word vocab pickle file in data "
                                                         "path")
 
+flags.DEFINE_bool   ("preallocate_gpu",   True,    "Preallocate all of the GPU memory")
 flags.DEFINE_integer("batch_size",        50,      "Batch size")
 flags.DEFINE_integer("emb_size",          224,     "Word embedding size")
 flags.DEFINE_integer("softmax_samples",   1024,    "Number of classes to sample for softmax")
