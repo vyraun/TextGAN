@@ -9,7 +9,7 @@ import nltk
 
 input_dir = 'gutenberg'  # raw text dir
 
-data_coverage = 0.975  # decide vocab based on how much of the data should be covered
+data_coverage = 0.966  # decide vocab based on how much of the data should be covered
 
 MIN_LEN = 4
 MAX_LEN = 75
