@@ -74,19 +74,14 @@ class Reader(object):
     def _prepare(self, lines):
         '''Prepare non-overlapping data'''
         seqs = []
-        seq = []
         for line in lines:
-            line.insert(0, self.vocab.sos_index)
-            for word in line:
-                seq.append(word)
-                if len(seq) == cfg.max_sent_length:
-                    seqs.append(seq)
-                    seq = []
+            line = ([self.vocab.sos_index] * cfg.history_size) + line + [self.vocab.sos_index]
+            for i in range(len(line) - cfg.history_size):
+                seqs.append(line[i:i+cfg.history_size+1])
         return seqs
 
     def buffered_read(self, fnames, buffer_size=500):
         '''Read and yield a list of non-overlapping sequences'''
-        buffer_size = max(buffer_size, cfg.max_sent_length)
         lines = []
         for line in self.read_lines(fnames):
             lines.append(line)
@@ -98,32 +93,15 @@ class Reader(object):
             random.shuffle(lines)
             yield self._prepare(lines)
 
-    def buffered_read_batches(self, fnames, buffer_size=500):
-        batches = []
+    def buffered_read_batches(self, fnames):
         batch = []
         for lines in self.buffered_read(fnames):
+            random.shuffle(lines)  # decorrelate the data
             for line in lines:
                 batch.append(line)
                 if len(batch) == cfg.batch_size:
-                    batches.append(self.pack(batch))
-                    if len(batches) == buffer_size:
-                        random.shuffle(batches)
-                        for batch in batches:
-                            yield batch
-                        batches = []
+                    yield np.array(batch, dtype=np.int32)
                     batch = []
-        # ignore current incomplete batch
-        if batches:
-            random.shuffle(batches)
-            for batch in batches:
-                yield batch
-
-    def pack(self, batch):
-        '''Pack python-list batches into numpy batches'''
-        ret_batch = np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)
-        for i, s in enumerate(batch):
-            ret_batch[i, :len(s)] = s
-        return ret_batch
 
     def training(self):
         '''Read batches from training data'''
@@ -146,19 +124,15 @@ def main(_):
 
     reader = Reader(vocab)
     c = 0
-    w = 0
     for batch in reader.training():
-        n_words = np.sum(batch != 0)
-        w += n_words
         c += len(batch)
-        #for line in batch:
-        #    print(line)
-        #    for e in line:
-        #        print(vocab.vocab[e], end=' ')
-        #    print()
-        #    print()
+        for line in batch:
+            print(line)
+            for e in line:
+                print(vocab.vocab[e], end=' ')
+            print()
+            print()
     print('Total lines:', c)
-    print('Total words:', w)
 
 
 if __name__ == '__main__':
