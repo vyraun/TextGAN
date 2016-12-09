@@ -60,7 +60,7 @@ class NGramModel(object):
     def predict(self, inputs):
         '''Use the word inputs to predict next word.'''
         with tf.variable_scope("Predictor"):
-            inputs = tf.concat(1, inputs)
+            inputs = tf.reshape(inputs, [-1, cfg.emb_size * cfg.history_size])
             l1 = tf.nn.elu(utils.linear(inputs, cfg.hidden_size, True, 0.0,
                                         scope='hidden_transform'))
             output = tf.nn.elu(utils.linear(l1, cfg.emb_size, True, 0.0, scope='output_transform'))

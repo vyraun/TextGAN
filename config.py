@@ -12,10 +12,10 @@ flags.DEFINE_string ("vocab_file", "wvocab.pk",         "Word vocab pickle file 
                                                         "path")
 
 flags.DEFINE_bool   ("preallocate_gpu",   False,   "Preallocate all of the GPU memory")
-flags.DEFINE_integer("batch_size",        50,      "Batch size")
+flags.DEFINE_integer("batch_size",        512,     "Batch size")
 flags.DEFINE_integer("history_size",      5,       "n for the n-gram model")
-flags.DEFINE_integer("emb_size",          224,     "Word embedding size")
-flags.DEFINE_integer("hidden_size",       800,     "Hidden state size")
+flags.DEFINE_integer("emb_size",          32,      "Word embedding size")
+flags.DEFINE_integer("hidden_size",       96,      "Hidden state size")
 flags.DEFINE_integer("softmax_samples",   1024,    "Number of classes to sample for softmax")
 flags.DEFINE_integer("max_sent_length",   256,     "Maximum length of a sentence in words")
 flags.DEFINE_bool   ("training",          True,    "Training mode, turn off for testing")

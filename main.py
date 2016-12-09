@@ -15,7 +15,7 @@ def call_session(session, model, batch):
     f_dict = {model.data: batch}
     # mle_train_op is tf.no_op() for a non-training model
     ops = [model.nll, model.mle_train_op]
-    return session.run(ops, f_dict)[:-1]
+    return session.run(ops, f_dict)[0]
 
 
 def generate_sentences(session, model, vocab):
@@ -44,7 +44,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
 
     for step, batch in enumerate(batch_loader):
         cur_iters = steps + step
-        nll, mle_cost = call_session(session, model, batch)
+        nll = call_session(session, model, batch)
         nlls += nll
         shortterm_nlls += nll
         shortterm_steps += 1
@@ -65,7 +65,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
 
         if saver is not None and cur_iters and cfg.save_every > 0 and \
                 cur_iters % cfg.save_every == 0:
-            save_model(session, saver, np.exp(nlls / steps), cur_iters)
+            save_model(session, saver, np.exp(nlls / step), cur_iters)
 
         if max_steps > 0 and cur_iters >= max_steps:
             break
@@ -74,7 +74,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
         for _ in range(cfg.gen_samples):
             generate_sentences(session, model, vocab)
 
-    perp = np.exp(nlls / steps)
+    perp = np.exp(nlls / step)
     cur_iters = steps + step
     if saver is not None and cfg.save_every < 0:
         save_model(session, saver, perp, cur_iters)
