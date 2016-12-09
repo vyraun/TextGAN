@@ -1,76 +1,6 @@
-import itertools
 import re
 
-import numpy as np
 import tensorflow as tf
-
-
-class Scheduler(object):
-
-    '''Scheduler for GANs'''
-
-    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay):
-        assert min_d_acc < max_d_acc
-        self.min_d_acc = min_d_acc
-        self.max_d_acc = max_d_acc
-        self.max_perp = max_perp
-        self.list_size = list_size
-        self.d_accs = []
-        self.perps = []
-        coeffs = [1.0]
-        for _ in range(list_size - 1):
-            coeffs.append(coeffs[-1] * decay)
-        self.coeffs = np.array(coeffs) / sum(coeffs)
-        # TODO make configurable
-        self.d_coeffs = np.array([0.998 ** i for i in range(list_size)])
-
-    def add_d_acc(self, d_acc):
-        '''Observe new descriminator accuracy.'''
-        self.d_accs.insert(0, d_acc)
-        if len(self.d_accs) > self.list_size:
-            self.d_accs.pop()
-
-    def add_perp(self, perp):
-        '''Observe new perplexity.'''
-        self.perps.insert(0, perp)
-        if len(self.perps) > self.list_size:
-            self.perps.pop()
-
-    def _current_perp(self):
-        '''Smooth approximation of current perplexity.'''
-        coeffs = self.coeffs.copy(order='K')
-        if len(self.perps) < self.list_size:
-            coeffs = coeffs[:len(self.perps)]
-            coeffs /= np.sum(coeffs)
-        return np.sum(np.array(self.perps) * coeffs)
-
-    def _current_d_acc(self):
-        '''Overestimate the current discriminator accuracy to avoid a powerful discriminator.'''
-        if not self.d_accs:
-            return 0.5
-        else:
-            return np.max(self.d_accs * self.d_coeffs[:len(self.d_accs)])
-
-    def update_d(self):
-        '''Whether or not to update the descriminator.'''
-#        if len(self.perps) < self.list_size or \
-#           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
-#            return False
-        if self._current_d_acc() < self.max_d_acc:
-            return True
-        else:
-            return False
-
-    def update_g(self):
-        '''Whether or not to update the generator.'''
-#        if len(self.perps) < self.list_size or \
-#           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
-#            return False
-#        if len(self.d_accs) > 0 and (d_acc < 0.0 or d_acc > self.min_d_acc):
-        if self._current_d_acc() > self.min_d_acc:
-            return True
-        else:
-            return False
 
 
 fix_re = re.compile(r'''[^a-z0-9"'?.,]+''')
@@ -84,21 +14,15 @@ def fix_word(word):
     return word
 
 
-def display_sentences(output, vocab, char_model):
+def display_sentences(output, vocab):
     '''Display sentences from indices.'''
-    if char_model:
-        space = ''
-        nospace = ' '
-    else:
-        space = ' '
-        nospace = ''
     for i, sent in enumerate(output):
         print('Sentence %d:' % i, end=' ')
         for word in sent:
             if word == vocab.sos_index:
-                print(nospace + '. ', end='')
+                print('.', end=' ')
             else:
-                print(vocab.vocab[word], end=space)
+                print(vocab.vocab[word], end=' ')
         print()
     print()
 
@@ -122,14 +46,6 @@ def read_words(line, chars):
                         yield c
             else:
                 yield word
-
-
-def grouper(n, iterable, fillvalue=None):
-    '''Group elements of iterable in groups of n. For example:
-       >>> [e for e in grouper(3, [1,2,3,4,5,6,7])]
-       [(1, 2, 3), (4, 5, 6), (7, None, None)]'''
-    args = [iter(iterable)] * n
-    return itertools.zip_longest(*args, fillvalue=fillvalue)
 
 
 def get_optimizer(lr, name):
@@ -156,18 +72,6 @@ def list_all_variables(trainable=True, rest=False):
         for v in tf.all_variables():
             if v not in trainv:
                 print(v.op.name)
-
-
-def rowwise_lookup(params, indices):
-    '''Look up an index from each row of params as per indices.'''
-    shape = params.get_shape().as_list()
-    if len(shape) == 2:
-        hidden_size = 1
-    else:
-        hidden_size = shape[-1]
-    flattened = tf.reshape(params, [-1, hidden_size])
-    flattened_indices = indices + (tf.range(shape[0]) * tf.shape(params)[1])
-    return tf.gather(flattened, flattened_indices)
 
 
 def linear(args, output_size, bias, bias_start=0.0, scope=None, train=True, initializer=None):

@@ -6,28 +6,23 @@ import tensorflow as tf
 
 from config import cfg
 from reader import Reader, Vocab
-from rnnlm import RNNLMModel
+from ngram import NGramModel
 import utils
 
 
-def call_session(session, model, batch, train_d=False, train_g=False):
+def call_session(session, model, batch):
     '''Use the session to run the model on the batch data.'''
     f_dict = {model.data: batch}
-    ops = [model.nll, model.mle_cost, model.d_cost, model.g_cost]
-    # training ops are tf.no_op() for a non-training model
-    train_ops = [model.mle_train_op]
-    if train_d:
-        train_ops.append(model.d_train_op)
-    if train_g:
-        train_ops.append(model.g_train_op)
-    ops.extend(train_ops)
-    return session.run(ops, f_dict)[:-len(train_ops)]
+    # mle_train_op is tf.no_op() for a non-training model
+    ops = [model.nll, model.mle_train_op]
+    return session.run(ops, f_dict)[:-1]
 
 
 def generate_sentences(session, model, vocab):
     '''Generate sentences using the generator.'''
-    f_dict = {model.data: np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)}
-    utils.display_sentences(session.run(model.generated, f_dict), vocab, cfg.char_model)
+#    f_dict = {model.data: np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)}
+#    utils.display_sentences(session.run(model.generated, f_dict), vocab, cfg.char_model)
+    pass  # TODO
 
 
 def save_model(session, saver, perp, cur_iters):
@@ -40,85 +35,28 @@ def save_model(session, saver, perp, cur_iters):
     print("Saved to", save_file)
 
 
-def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_steps, scheduler,
-              use_gan, gen_every):
+def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_steps, gen_every):
     '''Runs the model on the given data for an epoch.'''
     start_time = time.time()
     nlls = 0.0
-    mle_costs = 0.0
-    iters = 0
     shortterm_nlls = 0.0
-    shortterm_mle_costs = 0.0
-    shortterm_d_costs = 0.0
-    shortterm_g_costs = 0.0
-    shortterm_iters = 0
     shortterm_steps = 0
-    g_steps = 0
-    d_steps = 0
-    update_d = False
-    update_g = False
 
     for step, batch in enumerate(batch_loader):
         cur_iters = steps + step
-        if scheduler is not None:
-            update_d = use_gan and scheduler.update_d()
-            update_g = use_gan and scheduler.update_g()
-        if update_d:
-            d_steps += 1
-        if update_g:
-            g_steps += 1
-
-        nll, mle_cost, d_cost, g_cost = call_session(session, model, batch, train_d=update_d,
-                                                     train_g=update_g)
-        if scheduler is not None:
-            if cfg.d_energy_based:
-                d_acc = -1.0
-            else:
-                d_acc = np.exp(-d_cost)
-            scheduler.add_d_acc(d_acc)
-
-        if cfg.char_model:
-            n_words = (np.sum(batch == vocab.vocab_lookup[' ']) // cfg.batch_size) + 1
-        else:
-            n_words = cfg.max_sent_length
-        if scheduler is not None:
-            scheduler.add_perp(np.exp(nll / n_words))
-
+        nll, mle_cost = call_session(session, model, batch)
         nlls += nll
-        mle_costs += mle_cost
         shortterm_nlls += nll
-        shortterm_mle_costs += mle_cost
-        shortterm_d_costs += d_cost
-        shortterm_g_costs += g_cost
-        iters += n_words
-        shortterm_iters += n_words
         shortterm_steps += 1
 
         if step % cfg.print_every == 0:
-            avg_nll = shortterm_nlls / shortterm_iters
-            avg_mle_cost = shortterm_mle_costs / shortterm_steps
-            avg_d_cost = shortterm_d_costs / shortterm_steps
-            if cfg.d_energy_based:
-                d_acc = -1.0
-            else:
-                d_acc = np.exp(-avg_d_cost)
-            if g_steps:
-                avg_g_cost = shortterm_g_costs / g_steps
-            else:
-                avg_g_cost = -1.0
-            print("%d: %d (%d)  perplexity: %.3f  mle_loss: %.4f  mle_cost: %.4f  d_cost: %.4f  "
-                  "g_cost: %.4f  d_acc: %.4f  speed: %.0f wps  D:%d G:%d" % (epoch + 1, step,
-                  cur_iters, np.exp(avg_nll), avg_nll, avg_mle_cost, avg_d_cost, avg_g_cost, d_acc,
-                  shortterm_iters * cfg.batch_size / (time.time() - start_time), d_steps, g_steps))
+            avg_nll = shortterm_nlls / shortterm_steps
+            print("%d: %d (%d)  perplexity: %.3f  mle_loss: %.4f  speed: %.0f wps" %
+                  (epoch + 1, step, cur_iters, np.exp(avg_nll), avg_nll,
+                   shortterm_steps * cfg.batch_size / (time.time() - start_time)))
 
             shortterm_nlls = 0.0
-            shortterm_mle_costs = 0.0
-            shortterm_d_costs = 0.0
-            shortterm_g_costs = 0.0
-            shortterm_iters = 0
             shortterm_steps = 0
-            g_steps = 0
-            d_steps = 0
             start_time = time.time()
 
         if gen_every > 0 and (step + 1) % gen_every == 0:
@@ -127,7 +65,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
 
         if saver is not None and cur_iters and cfg.save_every > 0 and \
                 cur_iters % cfg.save_every == 0:
-            save_model(session, saver, np.exp(nlls / iters), cur_iters)
+            save_model(session, saver, np.exp(nlls / steps), cur_iters)
 
         if max_steps > 0 and cur_iters >= max_steps:
             break
@@ -136,7 +74,7 @@ def run_epoch(epoch, session, model, batch_loader, vocab, saver, steps, max_step
         for _ in range(cfg.gen_samples):
             generate_sentences(session, model, vocab)
 
-    perp = np.exp(nlls / iters)
+    perp = np.exp(nlls / steps)
     cur_iters = steps + step
     if saver is not None and cfg.save_every < 0:
         save_model(session, saver, perp, cur_iters)
@@ -155,18 +93,14 @@ def main(_):
         with tf.variable_scope("Model") as scope:
             if cfg.training:
                 with tf.variable_scope("LR"):
-                    g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
-                                           trainable=False)
-                    d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
-                                           trainable=False)
-                g_optimizer = utils.get_optimizer(g_lr, cfg.g_optimizer)
-                d_optimizer = utils.get_optimizer(d_lr, cfg.d_optimizer)
-                model = RNNLMModel(vocab, True, cfg.use_gan, g_optimizer=g_optimizer,
-                                   d_optimizer=d_optimizer)
+                    lr = tf.get_variable("lr", shape=[], initializer=tf.zeros_initializer,
+                                         trainable=False)
+                optimizer = utils.get_optimizer(lr, cfg.optimizer)
+                model = NGramModel(vocab, True, optimizer=optimizer)
                 scope.reuse_variables()
-                eval_model = RNNLMModel(vocab, False, cfg.use_gan)
+                eval_model = NGramModel(vocab, False)
             else:
-                test_model = RNNLMModel(vocab, False, cfg.use_gan)
+                test_model = NGramModel(vocab, False)
         saver = tf.train.Saver()
         steps = 0
         try:
@@ -185,20 +119,16 @@ def main(_):
         if cfg.training:
             train_perps = []
             valid_perps = []
-            session.run(tf.assign(g_lr, cfg.g_learning_rate))
-            session.run(tf.assign(d_lr, cfg.d_learning_rate))
-            scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        cfg.sc_list_size, cfg.sc_decay)
+            session.run(tf.assign(lr, cfg.learning_rate))
             for i in range(cfg.max_epoch):
                 print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, model, reader.training(), vocab, saver,
-                                              steps, cfg.max_steps, scheduler, cfg.use_gan,
-                                              cfg.gen_every)
+                                              steps, cfg.max_steps, cfg.gen_every)
                 print("Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity))
                 train_perps.append(perplexity)
                 if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_model, reader.validation(), vocab,
-                                              None, 0, -1, None, cfg.use_gan, -1)
+                                              None, 0, -1, -1)
                     print("Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity))
                     valid_perps.append(perplexity)
                 else:
@@ -210,7 +140,7 @@ def main(_):
         else:
             print('\nTesting')
             perplexity, _ = run_epoch(0, session, test_model, reader.testing(), vocab, None, 0,
-                                      cfg.max_steps, None, cfg.use_gan, -1)
+                                      cfg.max_steps, -1)
             print("Test Perplexity: %.3f" % perplexity)
 
 
