@@ -14,6 +14,26 @@ def fix_word(word):
     return word
 
 
+def combine_sentences(words, vocab, max_length):
+    outputs = []
+    output = []
+    current = []
+    for i, sent in enumerate(words):
+        for j, word in enumerate(sent):
+            current.append(word)
+            if word == vocab.sos_index or j == len(sent) - 1:
+                word = vocab.sos_index
+                if len(output) + len(current) > max_length:
+                    outputs.append(output)
+                    output = []
+                output.extend(current)
+                current = []
+                break
+    if output:
+        outputs.append(output)
+    return outputs
+
+
 def display_sentences(output, vocab):
     '''Display sentences from indices.'''
     for i, sent in enumerate(output):

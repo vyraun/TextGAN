@@ -27,6 +27,8 @@ class NGramModel(object):
         targets = self.data[:, -1]
         output = self.predict(embs)
 
+        self.generated = self.sample()
+
         self.nll = tf.reduce_sum(self.mle_loss(output, targets)) / cfg.batch_size
         self.mle_cost = self.nll
         if training:
@@ -57,14 +59,35 @@ class NGramModel(object):
             embeds = tf.nn.embedding_lookup(self.embedding, inputs, name='word_embedding_lookup')
         return embeds
 
-    def predict(self, inputs):
+    def predict(self, inputs, reuse=None):
         '''Use the word inputs to predict next word.'''
-        with tf.variable_scope("Predictor"):
+        with tf.variable_scope("Predictor", reuse=reuse):
             inputs = tf.reshape(inputs, [-1, cfg.emb_size * cfg.history_size])
             l1 = tf.nn.elu(utils.linear(inputs, cfg.hidden_size, True, 0.0,
                                         scope='hidden_transform'))
             output = tf.nn.elu(utils.linear(l1, cfg.emb_size, True, 0.0, scope='output_transform'))
         return output
+
+    def sample(self):
+        generated = tf.get_variable('generated', shape=[cfg.batch_size, cfg.history_size],
+                                    initializer=tf.zeros_initializer, trainable=False,
+                                    dtype=tf.int64)
+        i = tf.constant(0)
+        cond = lambda _, i: tf.less(i, cfg.max_sent_length)
+        def body(generated, i):
+            embeddings = self.word_embeddings(generated[:, -cfg.history_size:])
+            output = self.predict(embeddings, True)
+            logits = tf.nn.bias_add(tf.matmul(output, tf.transpose(self.softmax_w)), self.softmax_b)
+            logits = tf.nn.log_softmax(logits)
+            dist = tf.contrib.distributions.Categorical(logits)
+            prediction = tf.cast(dist.sample(), tf.int64)
+            generated = tf.concat(1, [generated, tf.expand_dims(prediction, -1)])
+            i = tf.add(i, 1)
+            return generated, i
+        result = tf.while_loop(cond, body, [generated, i],
+                               [tf.TensorShape([cfg.batch_size, None]), i.get_shape()],
+                               back_prop=False, swap_memory=True)[0]
+        return result[:, cfg.history_size:]
 
     def mle_loss(self, output, targets):
         '''Maximum likelihood estimation loss.'''

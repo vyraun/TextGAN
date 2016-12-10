@@ -20,9 +20,9 @@ def call_session(session, model, batch):
 
 def generate_sentences(session, model, vocab):
     '''Generate sentences using the generator.'''
-#    f_dict = {model.data: np.zeros([cfg.batch_size, cfg.max_sent_length], dtype=np.int32)}
-#    utils.display_sentences(session.run(model.generated, f_dict), vocab, cfg.char_model)
-    pass  # TODO
+    words = session.run(model.generated)
+    sents = utils.combine_sentences(words, vocab, cfg.max_sent_length)
+    utils.display_sentences(sents, vocab)
 
 
 def save_model(session, saver, perp, cur_iters):
