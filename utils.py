@@ -23,14 +23,12 @@ def combine_sentences(words, vocab, max_length):
             current.append(word)
             if word == vocab.sos_index or j == len(sent) - 1:
                 word = vocab.sos_index
-                if len(output) + len(current) > max_length:
-                    outputs.append(output)
-                    output = []
                 output.extend(current)
+                if len(output) >= max_length:
+                    outputs.append(output[:max_length])
+                    output = []
                 current = []
                 break
-    if output:
-        outputs.append(output)
     return outputs
 
 
