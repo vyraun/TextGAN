@@ -101,7 +101,7 @@ def main(_):
                 eval_model = NGramModel(vocab, False)
             else:
                 test_model = NGramModel(vocab, False)
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(max_to_keep=None)
         steps = 0
         try:
             # try to restore a saved model file

@@ -26,7 +26,7 @@ flags.DEFINE_integer("max_epoch",         10000,   "Maximum number of epochs to 
 flags.DEFINE_integer("max_steps",         9999999, "Maximum number of steps to run for")
 flags.DEFINE_integer("gen_samples",       1,       "Number of demo samples batches to generate "
                                                    "per epoch")
-flags.DEFINE_integer("gen_every",         500,     "Generate samples every these many training "
+flags.DEFINE_integer("gen_every",         1500,    "Generate samples every these many training "
                                                    "steps (0 to disable, -1 for each epoch)")
 flags.DEFINE_integer("print_every",       50,      "Print every these many steps")
 flags.DEFINE_integer("save_every",        -1,      "Save every these many steps (0 to disable, "
