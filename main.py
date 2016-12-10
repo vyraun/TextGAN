@@ -128,7 +128,7 @@ def main(_):
                 train_perps.append(perplexity)
                 if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
                     perplexity, _ = run_epoch(i, session, eval_model, reader.validation(), vocab,
-                                              None, 0, -1, -1)
+                                              None, 0, -1, cfg.gen_every)
                     print("Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity))
                     valid_perps.append(perplexity)
                 else:

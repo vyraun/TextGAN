@@ -11,8 +11,8 @@ flags.DEFINE_string ("load_file",  "",                  "File to load model from
 flags.DEFINE_string ("vocab_file", "wvocab.pk",         "Word vocab pickle file in data "
                                                         "path")
 
-flags.DEFINE_bool   ("preallocate_gpu",   False,   "Preallocate all of the GPU memory")
-flags.DEFINE_integer("batch_size",        512,     "Batch size")
+flags.DEFINE_bool   ("preallocate_gpu",   True,    "Preallocate all of the GPU memory")
+flags.DEFINE_integer("batch_size",        2560,    "Batch size")
 flags.DEFINE_integer("history_size",      5,       "n for the n-gram model")
 flags.DEFINE_integer("emb_size",          32,      "Word embedding size")
 flags.DEFINE_integer("hidden_size",       96,      "Hidden state size")
