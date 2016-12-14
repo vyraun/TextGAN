@@ -36,7 +36,7 @@ flags.DEFINE_integer("sc_list_size",      8,       "Number of previous prints to
 flags.DEFINE_float  ("sc_decay",          0.33,    "Scheduler importance decay")
 flags.DEFINE_bool   ("d_rnn",             True,    "Recurrent discriminator")
 flags.DEFINE_bool   ("d_energy_based",    False,   "Energy-based discriminator")
-flags.DEFINE_float  ("d_word_eb_margin",  512.0,   "Margin for energy-based discriminator for word "
+flags.DEFINE_float  ("d_word_eb_margin",  992.0,   "Margin for energy-based discriminator for word "
                                                    "model")
 flags.DEFINE_float  ("d_char_eb_margin",  1024.0,  "Margin for energy-based discriminator for char "
                                                    "model")
