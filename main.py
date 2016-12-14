@@ -187,8 +187,9 @@ def main(_):
             valid_perps = []
             session.run(tf.assign(g_lr, cfg.g_learning_rate))
             session.run(tf.assign(d_lr, cfg.d_learning_rate))
+            energy_based = cfg.d_rnn and cfg.d_energy_based
             scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        cfg.sc_list_size, cfg.sc_decay)
+                                        cfg.sc_list_size, cfg.sc_decay, eb=energy_based)
             for i in range(cfg.max_epoch):
                 print("\nEpoch: %d" % (i + 1))
                 perplexity, steps = run_epoch(i, session, model, reader.training(), vocab, saver,

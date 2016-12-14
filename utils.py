@@ -9,12 +9,13 @@ class Scheduler(object):
 
     '''Scheduler for GANs'''
 
-    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay):
+    def __init__(self, min_d_acc, max_d_acc, max_perp, list_size, decay, eb=False):
         assert min_d_acc < max_d_acc
         self.min_d_acc = min_d_acc
         self.max_d_acc = max_d_acc
         self.max_perp = max_perp
         self.list_size = list_size
+        self.eb = eb
         self.d_accs = []
         self.perps = []
         coeffs = [1.0]
@@ -38,6 +39,8 @@ class Scheduler(object):
 
     def _current_perp(self):
         '''Smooth approximation of current perplexity.'''
+        if not self.perps:
+            return float('inf')
         coeffs = self.coeffs.copy(order='K')
         if len(self.perps) < self.list_size:
             coeffs = coeffs[:len(self.perps)]
@@ -53,21 +56,18 @@ class Scheduler(object):
 
     def update_d(self):
         '''Whether or not to update the descriminator.'''
-#        if len(self.perps) < self.list_size or \
-#           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
-#            return False
-        if self._current_d_acc() < self.max_d_acc:
+        if self.max_perp > 0.0 and self._current_perp() > self.max_perp:
+            return False
+        if self.eb or self._current_d_acc() < self.max_d_acc:
             return True
         else:
             return False
 
     def update_g(self):
         '''Whether or not to update the generator.'''
-#        if len(self.perps) < self.list_size or \
-#           (self.max_perp > 0.0 and self._current_perp() > self.max_perp):
-#            return False
-#        if len(self.d_accs) > 0 and (d_acc < 0.0 or d_acc > self.min_d_acc):
-        if self._current_d_acc() > self.min_d_acc:
+        if self.max_perp > 0.0 and self._current_perp() > self.max_perp:
+            return False
+        if self.eb or self._current_d_acc() > self.min_d_acc:
             return True
         else:
             return False
