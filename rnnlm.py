@@ -206,22 +206,25 @@ class RNNLMModel(object):
                                          scope='discriminator_encoder')
             # XXX use BiRNN+convnet for the encoder
             # this latent needs a more capacity than to reproduce the hidden states
-            latent_size = cfg.hidden_size // 5
+            latent_size = cfg.hidden_size // 2
             latent = tf.nn.elu(utils.linear(state, latent_size, True,
                                             scope='discriminator_latent_transform'))
             latent = utils.highway(latent, layer_size=2, f=tf.nn.elu)
-            decoder_input = tf.concat(1, [tf.zeros([2 * cfg.batch_size, 1, cfg.hidden_size]),
-                                          states])
+            decoder_input = tf.concat(1, [tf.zeros([2 * cfg.batch_size, 1,
+                                                    states.get_shape()[2].value]), states])
             decoder_input = tf.concat(2, [decoder_input,
                                           tf.tile(tf.expand_dims(latent, 1),
                                                   [1, decoder_input.get_shape()[1].value, 1])])
-            output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, cfg.hidden_size),
+            hidden_size = cfg.hidden_size
+            if cfg.concat_inputs:
+                hidden_size += cfg.emb_size
+            output, _ = tf.nn.dynamic_rnn(self.rnn_cell(cfg.d_num_layers, hidden_size),
                                           decoder_input, swap_memory=True, dtype=tf.float32,
                                           scope='discriminator_decoder')
-            output = tf.reshape(output, [-1, cfg.hidden_size])
-            reconstructed = utils.linear(output, cfg.hidden_size, True, 0.0,
+            output = tf.reshape(output, [-1, hidden_size])
+            reconstructed = utils.linear(output, hidden_size, True, 0.0,
                                          scope='discriminator_reconst')
-            reconstructed = tf.reshape(reconstructed, [2 * cfg.batch_size, -1, cfg.hidden_size])
+            reconstructed = tf.reshape(reconstructed, [2 * cfg.batch_size, -1, hidden_size])
         return reconstructed
 
     def gan_energy_loss(self, states, targets):
