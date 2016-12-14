@@ -230,6 +230,7 @@ def main(_):
                 print("Test Perplexity: %.3f" % perplexity)
                 test_perps.append((int(steps), perplexity))
                 print('Test:', test_perps)
+                test_model = None
 
 
 if __name__ == "__main__":
