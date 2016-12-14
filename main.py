@@ -1,3 +1,4 @@
+import glob
 import sys
 import time
 
@@ -151,68 +152,84 @@ def main(_):
     config_proto = tf.ConfigProto()
     if not cfg.preallocate_gpu:
         config_proto.gpu_options.allow_growth = True
-    with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
-        with tf.variable_scope("Model") as scope:
-            if cfg.training:
-                with tf.variable_scope("LR"):
-                    g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
-                                           trainable=False)
-                    d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
-                                           trainable=False)
-                g_optimizer = utils.get_optimizer(g_lr, cfg.g_optimizer)
-                d_optimizer = utils.get_optimizer(d_lr, cfg.d_optimizer)
-                model = RNNLMModel(vocab, True, cfg.use_gan, g_optimizer=g_optimizer,
-                                   d_optimizer=d_optimizer)
-                scope.reuse_variables()
-                eval_model = RNNLMModel(vocab, False, cfg.use_gan)
-            else:
-                test_model = RNNLMModel(vocab, False, cfg.use_gan)
-        saver = tf.train.Saver(max_to_keep=None)
-        steps = 0
-        try:
-            # try to restore a saved model file
-            saver.restore(session, cfg.load_file)
-            print("Model restored from", cfg.load_file)
-            steps = session.run(model.global_step)
-        except ValueError:
-            if cfg.training:
-                tf.initialize_all_variables().run()
-                print("No loadable model file, new model initialized.")
-            else:
-                print("You need to provide a valid model file for testing!")
-                sys.exit(1)
-
-        if cfg.training:
-            train_perps = []
-            valid_perps = []
-            session.run(tf.assign(g_lr, cfg.g_learning_rate))
-            session.run(tf.assign(d_lr, cfg.d_learning_rate))
-            energy_based = cfg.d_rnn and cfg.d_energy_based
-            scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
-                                        cfg.sc_list_size, cfg.sc_decay, eb=energy_based)
-            for i in range(cfg.max_epoch):
-                print("\nEpoch: %d" % (i + 1))
-                perplexity, steps = run_epoch(i, session, model, reader.training(), vocab, saver,
-                                              steps, cfg.max_steps, scheduler, cfg.use_gan,
-                                              cfg.gen_every)
-                print("Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity))
-                train_perps.append(perplexity)
-                if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
-                    perplexity, _ = run_epoch(i, session, eval_model, reader.validation(), vocab,
-                                              None, 0, -1, None, cfg.use_gan, -1)
-                    print("Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity))
-                    valid_perps.append(perplexity)
+    if not cfg.training and not cfg.save_overwrite:
+        load_files = [f for f in glob.glob(cfg.load_file + '.*') if not f.endswith('meta')]
+        load_files = sorted(load_files, key=lambda x: int(x[len(cfg.load_file)+1:]))
+    else:
+        load_files = [cfg.load_file]
+    if not cfg.training:
+        test_perps = []
+    for load_file in load_files:
+        with tf.Graph().as_default(), tf.Session(config=config_proto) as session:
+            with tf.variable_scope("Model") as scope:
+                if cfg.training:
+                    with tf.variable_scope("LR"):
+                        g_lr = tf.get_variable("g_lr", shape=[], initializer=tf.zeros_initializer,
+                                               trainable=False)
+                        d_lr = tf.get_variable("d_lr", shape=[], initializer=tf.zeros_initializer,
+                                               trainable=False)
+                    g_optimizer = utils.get_optimizer(g_lr, cfg.g_optimizer)
+                    d_optimizer = utils.get_optimizer(d_lr, cfg.d_optimizer)
+                    model = RNNLMModel(vocab, True, cfg.use_gan, g_optimizer=g_optimizer,
+                                       d_optimizer=d_optimizer)
+                    scope.reuse_variables()
+                    eval_model = RNNLMModel(vocab, False, cfg.use_gan)
                 else:
-                    valid_perps.append(None)
-                print('Train:', train_perps)
-                print('Valid:', valid_perps)
-                if steps >= cfg.max_steps:
-                    break
-        else:
-            print('\nTesting')
-            perplexity, _ = run_epoch(0, session, test_model, reader.testing(), vocab, None, 0,
-                                      cfg.max_steps, None, cfg.use_gan, -1)
-            print("Test Perplexity: %.3f" % perplexity)
+                    test_model = RNNLMModel(vocab, False, cfg.use_gan)
+            saver = tf.train.Saver(max_to_keep=None)
+            steps = 0
+            try:
+                # try to restore a saved model file
+                saver.restore(session, load_file)
+                print("\nModel restored from", load_file)
+                with tf.variable_scope("Model", reuse=True):
+                    steps = session.run(tf.get_variable("GlobalMLE/global_step"))
+                print('Global step', steps)
+            except ValueError:
+                if cfg.training:
+                    tf.initialize_all_variables().run()
+                    print("No loadable model file, new model initialized.")
+                else:
+                    print("You need to provide a valid model file for testing!")
+                    sys.exit(1)
+
+            if cfg.training:
+                train_perps = []
+                valid_perps = []
+                session.run(tf.assign(g_lr, cfg.g_learning_rate))
+                session.run(tf.assign(d_lr, cfg.d_learning_rate))
+                energy_based = cfg.d_rnn and cfg.d_energy_based
+                scheduler = utils.Scheduler(cfg.min_d_acc, cfg.max_d_acc, cfg.max_perplexity,
+                                            cfg.sc_list_size, cfg.sc_decay, eb=energy_based)
+                for i in range(cfg.max_epoch):
+                    print("\nEpoch: %d" % (i + 1))
+                    perplexity, steps = run_epoch(i, session, model, reader.training(), vocab,
+                                                  saver, steps, cfg.max_steps, scheduler,
+                                                  cfg.use_gan, cfg.gen_every)
+                    print("Epoch: %d Train Perplexity: %.3f" % (i + 1, perplexity))
+                    train_perps.append(perplexity)
+                    if cfg.validate_every > 0 and (i + 1) % cfg.validate_every == 0:
+                        perplexity, _ = run_epoch(i, session, eval_model, reader.validation(),
+                                                  vocab, None, 0, -1, None, cfg.use_gan, -1)
+                        print("Epoch: %d Validation Perplexity: %.3f" % (i + 1, perplexity))
+                        valid_perps.append(perplexity)
+                    else:
+                        valid_perps.append(None)
+                    print('Train:', train_perps)
+                    print('Valid:', valid_perps)
+                    if steps >= cfg.max_steps:
+                        break
+            else:
+                if cfg.test_validation:
+                    batch_loader = reader.validation()
+                else:
+                    batch_loader = reader.testing()
+                print('\nTesting')
+                perplexity, _ = run_epoch(0, session, test_model, batch_loader, vocab, None, 0,
+                                          cfg.max_steps, None, cfg.use_gan, -1)
+                print("Test Perplexity: %.3f" % perplexity)
+                test_perps.append((int(steps), perplexity))
+                print('Test:', test_perps)
 
 
 if __name__ == "__main__":
