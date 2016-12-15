@@ -154,7 +154,7 @@ def main(_):
         config_proto.gpu_options.allow_growth = True
     if not cfg.training and not cfg.save_overwrite:
         load_files = [f for f in glob.glob(cfg.load_file + '.*') if not f.endswith('meta')]
-        load_files = sorted(load_files, key=lambda x: int(x[len(cfg.load_file)+1:]))
+        load_files = sorted(load_files, key=lambda x: float(x[len(cfg.load_file)+1:]))
     else:
         load_files = [cfg.load_file]
     if not cfg.training:
